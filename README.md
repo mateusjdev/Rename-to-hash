@@ -17,7 +17,7 @@ md5 / sha1 / sha224 / sha256 / sha384 / sha512
 
 #### Usage
 ```
-Usage: rename.py [OPTIONS] 
+Usage: rename.py [OPTIONS]
 
 Options:
   -h            Print this help text and exit
