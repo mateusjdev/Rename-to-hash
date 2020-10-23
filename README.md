@@ -22,7 +22,7 @@ Usage: rename.py [OPTIONS]
 Options:
   -h            Print this help text and exit
   -H HASH       Hash that will be used: [md5/sha1/sha224/sha256/sha384/sha512]
-  -i DIR/FILE   (Soon) Files that will be hashed
+  -i DIR/FILE   Files that will be hashed
   -o DIR        (Soon) Location were hashed files will be stored
   -r            (Soon) Recursive
   -s FILE       (Soon) Saves a log in .json format
