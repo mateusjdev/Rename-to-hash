@@ -25,8 +25,9 @@ Options:
   -h            Print this help text and exit
   -H HASH       Hash that will be used: [md5/sha1/sha224/sha256/sha384/sha512]
   -i DIR/FILE   Files that will be hashed
-  -o DIR        Location were hashed files will be stored
+  -o DIR        Location were hashed files will be stored  
+  -j FILE       Saves a log in .json format
+  -d            Dry run, doesn't rename or delete files
   -r            (Soon) Recursive
-  -s FILE       (Soon) Saves a log in .json format
-  -d            dry run, doesn't rename or delete files
+  -m DIR        (Soon) Location to move duplicated files
 ```
