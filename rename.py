@@ -14,11 +14,10 @@ def help():
     print('Usage: rename.py [OPTIONS]\n')
     print('Options:')
     print('  -h           Print this help text and exit')
-    print('  -H HASH      Hash that will be used: [md5/sha1/sha224/sha256/sha384/sha512]')
+    print('  -H HASH      Hash that will be used: [md5/sha1/sha224/sha256'
+    + '/sha384/sha512]')
     print('  -i DIR/FILE  Files that will be hashed')
-    print('  -o DIR       (Soon) Location were hashed files will be stored')
-    print('  -r           (Soon) Recursive')
-    print('  -s FILE      (Soon) Saves a log in .json format')
+    print('  -o DIR       Location were hashed files will be stored')
 
 def hash(file, method):
     if not os.path.isdir(file):
@@ -49,55 +48,79 @@ def main(argv):
             sys.exit(1)
 
     try:
-        opts, args = getopt.getopt(argv, "hH:i:", ["hash=", "ifile="])
+        opts, args = getopt.getopt(argv, "hH:i:o:",["hash=", "ipath=","o_file"])
     except getopt.GetoptError:
         help_inv('')
         sys.exit(1)
 
     use_hash = ''
-    use_folder='./'
+    input_folder='./'
+    output_folder=''
     filelist = ''
 
+    # todo: replace getop with argparse
     for opt, arg in opts:
         if opt == "-h":
             help()
             sys.exit(1)
         elif opt in ("-H", "--hash"):
-            if(arg == "sha1" or arg == "sha224" or arg == "sha256" or arg == "sha384" or arg == "sha512" or arg == "md5"):
+            if(arg == "sha1" or arg == "sha224" or arg == "sha256" or
+            arg == "sha384" or arg == "sha512" or arg == "md5"):
                 use_hash = arg
             else:
                 help_inv("-H " + arg)
                 sys.exit(1)
-        elif opt in ("-i", "--ifile"):
+        elif opt in ("-i", "--ipath"):
             if os.path.isdir(arg):
-                use_folder = arg
+                input_folder = arg
             elif(os.path.isfile(arg)):
-                use_folder = os.path.dirname(arg)
+                input_folder = os.path.dirname(arg)
                 filelist = [os.path.basename(arg)]
             else:
-                print("rename.py: Unable to find \"" + arg + "\": No such file or directory")
+                print("rename.py: Unable to find \"" + arg +
+                "\": No such file or directory")
                 sys.exit(2)
+        elif opt in ("-o","o_file"):
+            if os.path.isdir(arg):
+                output_folder = arg
+            else:
+                o_folder, o_file = os.path.splitext(arg)
+                if os.path.isdir(o_folder):
+                    if len(filelist) == 1:
+                        output_folder = o_folder
+                        if os.path.isfile(arg):
+                            help_inv('-o')
+                    else:
+                        help_inv('-o ' + arg)
+                else:
+                    print("rename.py: \"" + o_folder +
+                    "\": Is not a valid directory")
+
+    if output_folder == '':
+        output_folder = input_folder
 
     if not filelist:
-        unsorted = os.listdir(use_folder)
+        unsorted = os.listdir(input_folder)
         filelist = sorted(unsorted, key=len)
 
     for file in filelist:
         if not (file) == "rename.py":
-            filename, file_extension = os.path.splitext((use_folder + "/" + file))
+            filename, file_extension = os.path.splitext((input_folder + "/" + file))
 
-            sum = hash(use_folder + "/" + file, use_hash)
+            sum = hash(input_folder + "/" + file, use_hash)
 
             try:
                 print("Trying to rename: " + file)
 
-                if os.path.isfile(use_folder + "/" + sum + file_extension):
+                if os.path.isfile(output_folder + "/" + sum + file_extension):
                     print("file " + sum + file_extension + " already exists")
-                    if not (use_folder + "/" + file) == (use_folder + "/" + sum + file_extension):
+                    if not os.path.samefile(input_folder + "/" + file,
+                    output_folder + "/" + sum + file_extension):
                         print("Removing: " + file + " because it is a duplicate")
-                        os.remove(use_folder + "/" + file)
+                        os.remove(input_folder + "/" + file)
                 elif not sum == "dir":
-                    os.rename(use_folder + "/" + file, use_folder + "/" + sum + file_extension)
+                    os.rename(input_folder + "/" + file, output_folder + "/"
+                    + sum + file_extension)
                     print(file + ' --> ' + sum + file_extension)
                 else:
                     print("Skipping directory " + file)
