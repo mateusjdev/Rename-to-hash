@@ -18,6 +18,7 @@ def help():
     + '/sha384/sha512]')
     print('  -i DIR/FILE  Files that will be hashed')
     print('  -o DIR       Location were hashed files will be stored')
+    print('  -d           dry run, doesn\'t rename or delete files')
 
 def hash(file, method):
     if not os.path.isdir(file):
@@ -48,7 +49,7 @@ def main(argv):
             sys.exit(1)
 
     try:
-        opts, args = getopt.getopt(argv, "hH:i:o:",["hash=", "ipath=","o_file"])
+        opts, args = getopt.getopt(argv, "dhH:i:o:",["hash=", "ipath=","o_file"])
     except getopt.GetoptError:
         help_inv('')
         sys.exit(1)
@@ -57,12 +58,15 @@ def main(argv):
     input_folder='./'
     output_folder=''
     filelist = ''
+    dry_run = False
 
     # todo: replace getop with argparse
     for opt, arg in opts:
         if opt == "-h":
             help()
             sys.exit(1)
+        elif opt == "-d":
+            dry_run = True
         elif opt in ("-H", "--hash"):
             if(arg == "sha1" or arg == "sha224" or arg == "sha256" or
             arg == "sha384" or arg == "sha512" or arg == "md5"):
@@ -116,12 +120,19 @@ def main(argv):
                     print("file " + sum + file_extension + " already exists")
                     if not os.path.samefile(input_folder + "/" + file,
                     output_folder + "/" + sum + file_extension):
-                        print("Removing: " + file + " because it is a duplicate")
-                        os.remove(input_folder + "/" + file)
+                        if not dry_run:
+                            print("Removing: " + file + " because it is a duplicate")
+                            os.remove(input_folder + "/" + file)
+                        else:
+                            print("(dry-run) Removing: " + file + " because it is a duplicate")
+
                 elif not sum == "dir":
-                    os.rename(input_folder + "/" + file, output_folder + "/"
-                    + sum + file_extension)
-                    print(file + ' --> ' + sum + file_extension)
+                    if not dry_run:
+                        print(file + ' --> ' + sum + file_extension)
+                        os.rename(input_folder + "/" + file, output_folder +
+                        "/" + sum + file_extension)
+                    else:
+                        print('(dry-run) ' + file + ' --> ' + sum + file_extension)
                 else:
                     print("Skipping directory " + file)
 

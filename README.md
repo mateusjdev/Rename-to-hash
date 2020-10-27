@@ -28,5 +28,5 @@ Options:
   -o DIR        Location were hashed files will be stored
   -r            (Soon) Recursive
   -s FILE       (Soon) Saves a log in .json format
-  -l            (Soon) log only, doesn't rename or delete files
+  -d            dry run, doesn't rename or delete files
 ```
