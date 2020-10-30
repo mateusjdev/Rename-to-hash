@@ -28,6 +28,6 @@ Options:
   -o DIR        Location were hashed files will be stored  
   -j FILE       Saves a log in .json format
   -d            Dry run, doesn't rename or delete files
+  -p DIR        Location to move and preserve duplicated files
   -r            (Soon) Recursive
-  -m DIR        (Soon) Location to move duplicated files
 ```
