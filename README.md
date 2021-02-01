@@ -23,11 +23,11 @@ Usage: rename.py [OPTIONS]
 
 Options:
   -h            Print this help text and exit
+  -d            Dry run, doesn't rename or delete files
   -H HASH       Hash that will be used: [md5/sha1/sha224/sha256/sha384/sha512]
   -i DIR/FILE   Files that will be hashed
-  -o DIR        Location were hashed files will be stored  
   -j FILE       Saves a log in .json format
-  -d            Dry run, doesn't rename or delete files
+  -o DIR        Location were hashed files will be stored  
   -p DIR        Location to move and preserve duplicated files
   -r            (Soon) Recursive
 ```
