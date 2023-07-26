@@ -29,5 +29,7 @@ Options:
   -j FILE       Saves a log in .json format
   -o DIR        Location were hashed files will be stored  
   -p DIR        Location to move and preserve duplicated files
-  -r            (Soon) Recursive
+  -r            (todo) Recursive
+  -s            (todo) Check if size is equal
+  -c            (todo) Hash list (use more than 1 hash to compare)
 ```
