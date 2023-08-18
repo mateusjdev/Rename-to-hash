@@ -1,13 +1,13 @@
 import os
 import sys
 import hashlib
-import json
 import argparse
 
 # 2 -> USER ERROR
 # 3 -> CODE ERROR
+
 def exit_with_error(error: str, err_nu:int):
-    print(error)
+    print("ERROR: " + error)
     sys.exit(err_nu)
 
 def hash_file(file_path: str, hash_method: str) -> str:
@@ -65,6 +65,47 @@ def can_be_saved(string):
     else:
         exit_with_error('Not a valid path: ' + string, 2)
 
+def _action_move(source: str, destination: str, dry_run: bool):
+    # todo: get common base path from source and destination
+    #   if commom path, show input.txt -> output.txt
+    # todo: check if source and destination are valid
+    if dry_run:
+        print('(dry-run) ' + source + ' --> ' + destination)
+    else:
+        os.rename(source, destination)
+        print(source + ' --> ' + destination)
+
+def action_move(source: str, destination: str, dry_run: bool):
+
+    if not os.path.isfile(source):
+        exit_with_error("Cannot move dir", 3)
+
+    if os.path.isdir(destination):
+        destination = destination + "/" + os.path.basename(source)
+        action_move(source, destination, dry_run)
+        return
+
+    if not os.path.exists(destination):
+        _action_move(source, destination, dry_run)
+        return
+
+    if os.path.samefile(source, destination):
+        print("file " + source + " already hashed")
+        return
+
+    iterator = 1
+    prefix_path = os.path.splitext(destination)[0] + "_"
+    postfix_path = os.path.splitext(destination)[1]
+    while True:
+        new_destination = prefix_path + str(iterator) + postfix_path
+        if os.path.exists(new_destination):
+            if os.path.samefile(source, new_destination):
+                print("file " + source + " already hashed")
+                return
+            iterator = iterator + 1
+        else:
+            _action_move(source, new_destination, dry_run)
+            return
 
 def main():
     parser = argparse.ArgumentParser(
@@ -97,45 +138,10 @@ def main():
                         action='store',
                         help='Location were hashed files will be stored')
 
-    parser.add_argument('-j',
-                        '--json',
-                        metavar='FILE',
-                        type=can_be_saved,
-                        action='store',
-                        help='Saves a log in .json format')
-
-    parser.add_argument('-p',
-                        '--preserve',
-                        metavar='DIR',
-                        type=is_folder,
-                        action='store',
-                        help='Location to move and preserve duplicated files')
-
     argsp = parser.parse_args()
 
-    json_path = ""  # json is not None = path
-    json_opt = []
-    json_args = {}
-    json_data = []
-
-    # JSON
-    # todo: json = file path? x folder path
-    # todo: if !json doesnot log any
-    # with argparse argsp.json already is a valid path to be saved:
-    use_json = argsp.json is not None
-    if use_json:
-        json_path = argsp.json
-        json_opt.append("-j")
-        json_args["json_path"] = json_path
-
-    # dry_run
     dry_run = argsp.dry_run
-    if dry_run:
-        json_opt.append("--dry-run")
-
-    # Hash
     use_hash = argsp.hash
-    json_args["hash"] = use_hash
 
     # Input
     # this part of code runs anyway because if user does not define
@@ -149,21 +155,11 @@ def main():
     elif os.path.isfile(argsp.input):
         input_folder = os.path.dirname(argsp.input)
         input_file_list = [os.path.basename(argsp.input)]
-    json_args["input_path"] = argsp.input
 
     output_folder = input_folder if argsp.output is None else argsp.output
-    json_args["output_path"] = output_folder
 
-    print(vars(argsp))
-
-    preserve = argsp.preserve is not None
-    preserve_folder = ''  # preserve is not None = path
-    if preserve:
-        preserve_folder = argsp.preserve
-        if preserve_folder == output_folder:
-            parser.error("Preseve folder can't be the same as output folder")
-        json_opt.append("-p")
-        json_args["preserve_path"] = preserve_folder
+    if dry_run:
+        print(vars(argsp))
 
     # input_file_path		= /in/input.txt
     # input_file_basepath	= /in/
@@ -180,87 +176,33 @@ def main():
     output_file_basepath = output_folder + "/"
     input_file_basepath = input_folder + "/"
 
-    # for input_file_name in input_file_list:
     for input_file_name in input_file_list:
-        if input_file_name == "rename.py": # todo: sys.argv[0]
-            print("Skipping source file " + input_file_name)
-            continue
-
-        if os.path.isdir(input_file_name):
-            print("Skipping directory " + input_file_name)
-            continue
 
         # "/in/" + "input.txt" -> "/in/input.txt"
         input_file_path = input_file_basepath + input_file_name
 
-        if os.path.isfile(input_file_path) and not os.path.isdir(input_file_path):
-            json_temp = {}
+        if input_file_name == "rename.py": # todo: sys.argv[0]
+            print("Skipping source file " + input_file_name)
+            continue
 
-            # only hash_string without path, name or extensions
-            # return("01234567890abcdef01234567890abcd")
-            output_file_name_only = hash_file(input_file_path, use_hash)
-            # output_file_name = "01234567890abcdef01234567890abcd" + "txt" <- "/in/input.txt"
-            output_file_name = output_file_name_only + os.path.splitext(input_file_path)[1]
-            output_file_path = output_file_basepath + output_file_name
+        if os.path.isdir(input_file_path):
+            print("Skipping directory " + input_file_name)
+            continue
 
-            print("Trying to rename: " + input_file_name)
+        if not os.path.isfile(input_file_path):
+            exit_with_error("Not file or dir",3)
+            break
 
-            # if output_file_path exists
-            if os.path.isfile(output_file_path):
-                print("file " + output_file_name + " already exists")
-                # if input_file_path = output_file_path then:
-                if os.path.samefile(input_file_path, output_file_path):
-                    json_temp["origin_path"] = input_file_path
-                    json_temp["hash"] = output_file_name_only
-                    json_temp["action"] = "already-hashed"
-                # if input_file_path != output_file_path then:
-                else:
-                    # if (preserve) move (input_file_path) to (preserve_file_path)
-                    if preserve:
-                        preserve_file_path = preserve_folder + "/" + input_file_name
-                        if dry_run:
-                            print("(dry-run) " + input_file_name + " is a duplicate")
-                        else:
-                            print("Moving: " + input_file_name + " because it is a duplicate")
-                            os.rename(input_file_path, preserve_file_path)
-                        json_temp["origin_path"] = input_file_path
-                        json_temp["dest_path"] = preserve_file_path
-                        json_temp["hash"] = output_file_name_only
-                        json_temp["action"] = "duplicate-moved"
-                    # if !(preserve) delete (input_file_path)
-                    else:
-                        if dry_run:
-                            print("(dry-run) " + input_file_name + " is a duplicate")
-                        else:
-                            print("Removing: " + input_file_name + " because it is a duplicate")
-                            os.remove(input_file_path)
-                        json_temp["origin_path"] = input_file_path
-                        json_temp["hash"] = output_file_name_only
-                        json_temp["action"] = "duplicate-removed"
-            else:
-                if dry_run:
-                    print('(dry-run) ' + input_file_name + ' --> ' + output_file_name)
-                else:
-                    print(input_file_name + ' --> ' + output_file_name)
-                    os.rename(input_file_path, output_file_path)
-                json_temp["origin_path"] = input_file_path
-                json_temp["dest_path"] = output_file_path
-                json_temp["hash"] = output_file_name_only
-                json_temp["action"] = "renamed"
+        print("Trying to rename: " + input_file_name)
 
-            json_data.append(json_temp)
+        # only hash_string without path, name or extensions
+        # return("01234567890abcdef01234567890abcd")
+        output_file_name_only = hash_file(input_file_path, use_hash)
+        # output_file_name = "01234567890abcdef01234567890abcd" + "txt" <- "/in/input.txt"
+        output_file_name = output_file_name_only + os.path.splitext(input_file_path)[1]
+        output_file_path = output_file_basepath + output_file_name
 
-            print("")
-
-    if use_json:
-        json_args['options'] = json_opt
-        json_args['data'] = json_data
-
-        with open(json_path, 'w', encoding="utf-8") as json_file:
-            json.dump(json_args, json_file, indent=4)
-
-        print('.json log saved as \"' + json_path + '\"\n')
-
+        action_move(input_file_path, output_file_path, dry_run)
 
 if __name__ == "__main__":
     main()
