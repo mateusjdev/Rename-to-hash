@@ -2,8 +2,6 @@
 
 Single python file to rename all files in a directory to their hash sums
 
----
-
 ## Run the file
 
 The file is written in the language `python` which means you have to have `python` installed.
@@ -33,8 +31,6 @@ Options:
   -o DIR        Location were hashed files will be stored
 ```
 
----
-
 ## todo
 
 - apply common path to logs
@@ -51,7 +47,7 @@ Options:
 
 ## Maybe
 
-> These options can be implemented easily, but in my use case, they are not needed
+These options can be implemented easily, but in my use case, they are not needed
 
 - "--delete": As now, due to hash colision, duplicated files are not deleted
 - "--confirm": Use another hash to compare duplicated files

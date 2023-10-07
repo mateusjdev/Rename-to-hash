@@ -6,9 +6,13 @@ import argparse
 # 2 -> USER ERROR
 # 3 -> CODE ERROR
 
-def exit_with_error(error: str, err_nu:int):
+VERSION = "v2.0rc"
+
+
+def exit_with_error(error: str, err_nu: int):
     print("ERROR: " + error)
     sys.exit(err_nu)
+
 
 def hash_file(file_path: str, hash_method: str) -> str:
     if os.path.isdir(file_path):
@@ -33,6 +37,7 @@ def hash_file(file_path: str, hash_method: str) -> str:
         exit_with_error("Could't compute file hash from" + file_path, 3)
     return hash_string
 
+
 def valid_hash(string):
     hashs = ["sha1", "sha224", "sha256", "sha384", "sha512", "md5"]
     if string in hashs:
@@ -49,9 +54,9 @@ def is_path(string):
 
 def is_folder(string):
     abs_arg = os.path.abspath(string)
-    if os.path.isdir(abs_arg):
-        return abs_arg
-    exit_with_error('Not a valid directory: ' + string, 2)
+    if not os.path.isdir(abs_arg):
+        exit_with_error('Not a valid directory: ' + string, 2)
+    return abs_arg
 
 
 def can_be_saved(string):
@@ -65,8 +70,10 @@ def can_be_saved(string):
     else:
         exit_with_error('Not a valid path: ' + string, 2)
 
+
 def _action_move(source: str, destination: str, dry_run: bool):
     # todo: get common base path from source and destination
+    # example: linux mv -v
     #   if commom path, show input.txt -> output.txt
     # todo: check if source and destination are valid
     if dry_run:
@@ -74,6 +81,7 @@ def _action_move(source: str, destination: str, dry_run: bool):
     else:
         os.rename(source, destination)
         print(source + ' --> ' + destination)
+
 
 def action_move(source: str, destination: str, dry_run: bool):
 
@@ -107,6 +115,7 @@ def action_move(source: str, destination: str, dry_run: bool):
             _action_move(source, new_destination, dry_run)
             return
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Single python file to rename all files in a directory to their hash sums.")
@@ -137,6 +146,11 @@ def main():
                         type=is_folder,
                         action='store',
                         help='Location were hashed files will be stored')
+
+    parser.add_argument('-v',
+                        '--version',
+                        action='version',
+                        version=VERSION)
 
     argsp = parser.parse_args()
 
@@ -181,7 +195,7 @@ def main():
         # "/in/" + "input.txt" -> "/in/input.txt"
         input_file_path = input_file_basepath + input_file_name
 
-        if input_file_name == "rename.py": # todo: sys.argv[0]
+        if input_file_name == "rename.py":  # todo: sys.argv[0]
             print("Skipping source file " + input_file_name)
             continue
 
@@ -190,7 +204,7 @@ def main():
             continue
 
         if not os.path.isfile(input_file_path):
-            exit_with_error("Not file or dir",3)
+            exit_with_error("Not file or dir", 3)
             break
 
         print("Trying to rename: " + input_file_name)
@@ -199,10 +213,12 @@ def main():
         # return("01234567890abcdef01234567890abcd")
         output_file_name_only = hash_file(input_file_path, use_hash)
         # output_file_name = "01234567890abcdef01234567890abcd" + "txt" <- "/in/input.txt"
-        output_file_name = output_file_name_only + os.path.splitext(input_file_path)[1]
+        output_file_name = output_file_name_only + \
+            os.path.splitext(input_file_path)[1]
         output_file_path = output_file_basepath + output_file_name
 
         action_move(input_file_path, output_file_path, dry_run)
+
 
 if __name__ == "__main__":
     main()
