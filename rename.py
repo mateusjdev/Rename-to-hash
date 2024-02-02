@@ -16,24 +16,25 @@ def hash_file(file_path: str, hash_method: str) -> str:
     if os.path.isdir(file_path):
         exit_with_error("Not a valid file:" + file_path, USER_ERROR)
 
-    file_bin = open(file_path, 'rb')
-    hash_string = ""
-    if hash_method == "md5":
-        hash_string = hashlib.md5(file_bin.read()).hexdigest()
-    elif hash_method == "sha1":
-        hash_string = hashlib.sha1(file_bin.read()).hexdigest()
-    elif hash_method == "sha224":
-        hash_string = hashlib.sha224(file_bin.read()).hexdigest()
-    elif hash_method == "sha256":
-        hash_string = hashlib.sha256(file_bin.read()).hexdigest()
-    elif hash_method == "sha384":
-        hash_string = hashlib.sha384(file_bin.read()).hexdigest()
-    elif hash_method == "sha512":
-        hash_string = hashlib.sha512(file_bin.read()).hexdigest()
-    file_bin.close()
-    if hash_string == "":
+    dict_hash_methods = {
+        "md5": hashlib.md5,
+        "sha1": hashlib.sha1,
+        "sha224": hashlib.sha224,
+        "sha256": hashlib.sha256,
+        "sha384": hashlib.sha384,
+        "sha512": hashlib.sha512
+    }
+
+    try:
+        hash = dict_hash_methods[hash_method]()
+    except KeyError:
         exit_with_error("Could't compute file hash from" + file_path, CODE_ERROR)
-    return hash_string
+
+    with open(file_path, 'rb') as file_bin:
+        for block in iter(lambda: file_bin.read(4096), b''):
+            hash.update(block)
+        
+    return hash.hexdigest()
 
 
 def valid_hash(string):
