@@ -3,11 +3,9 @@ import sys
 import hashlib
 import argparse
 
-# 2 -> USER ERROR
-# 3 -> CODE ERROR
-
+USER_ERROR = 2
+CODE_ERROR = 3
 VERSION = "v2.0rc"
-
 
 def exit_with_error(error: str, err_nu: int):
     print("ERROR: " + error)
@@ -16,59 +14,60 @@ def exit_with_error(error: str, err_nu: int):
 
 def hash_file(file_path: str, hash_method: str) -> str:
     if os.path.isdir(file_path):
-        exit_with_error("Not a valid file:" + file_path, 2)
+        exit_with_error("Not a valid file:" + file_path, USER_ERROR)
 
-    file_bin = open(file_path, 'rb')
-    hash_string = ""
-    if hash_method == "md5":
-        hash_string = hashlib.md5(file_bin.read()).hexdigest()
-    elif hash_method == "sha1":
-        hash_string = hashlib.sha1(file_bin.read()).hexdigest()
-    elif hash_method == "sha224":
-        hash_string = hashlib.sha224(file_bin.read()).hexdigest()
-    elif hash_method == "sha256":
-        hash_string = hashlib.sha256(file_bin.read()).hexdigest()
-    elif hash_method == "sha384":
-        hash_string = hashlib.sha384(file_bin.read()).hexdigest()
-    elif hash_method == "sha512":
-        hash_string = hashlib.sha512(file_bin.read()).hexdigest()
-    file_bin.close()
-    if hash_string == "":
-        exit_with_error("Could't compute file hash from" + file_path, 3)
-    return hash_string
+    dict_hash_methods = {
+        "md5": hashlib.md5,
+        "sha1": hashlib.sha1,
+        "sha224": hashlib.sha224,
+        "sha256": hashlib.sha256,
+        "sha384": hashlib.sha384,
+        "sha512": hashlib.sha512
+    }
+
+    try:
+        hash = dict_hash_methods[hash_method]()
+    except KeyError:
+        exit_with_error("Could't compute file hash from" + file_path, CODE_ERROR)
+
+    with open(file_path, 'rb') as file_bin:
+        for block in iter(lambda: file_bin.read(4096), b''):
+            hash.update(block)
+        
+    return hash.hexdigest()
 
 
 def valid_hash(string):
     hashs = ["sha1", "sha224", "sha256", "sha384", "sha512", "md5"]
     if string in hashs:
         return string
-    exit_with_error("Not a valid hash algorithm" + string, 2)
+    exit_with_error("Not a valid hash algorithm" + string, USER_ERROR)
 
 
 def is_path(string):
     abs_arg = os.path.abspath(string)
     if os.path.isfile(abs_arg) or os.path.isdir(abs_arg):
         return abs_arg
-    exit_with_error('No such file or directory: ' + string, 2)
+    exit_with_error('No such file or directory: ' + string, USER_ERROR)
 
 
 def is_folder(string):
     abs_arg = os.path.abspath(string)
     if not os.path.isdir(abs_arg):
-        exit_with_error('Not a valid directory: ' + string, 2)
+        exit_with_error('Not a valid directory: ' + string, USER_ERROR)
     return abs_arg
 
 
 def can_be_saved(string):
     abs_arg = os.path.abspath(string)
     if os.path.isdir(abs_arg):
-        exit_with_error('Not a valid filename: ' + string, 2)
+        exit_with_error('Not a valid filename: ' + string, USER_ERROR)
     elif os.path.isfile(abs_arg):
-        exit_with_error('File already exists: ' + string, 2)
+        exit_with_error('File already exists: ' + string, USER_ERROR)
     elif not os.path.exists(abs_arg) and os.path.isdir(os.path.dirname(abs_arg)):
         return abs_arg
     else:
-        exit_with_error('Not a valid path: ' + string, 2)
+        exit_with_error('Not a valid path: ' + string, USER_ERROR)
 
 
 def _action_move(source: str, destination: str, dry_run: bool):
@@ -86,7 +85,7 @@ def _action_move(source: str, destination: str, dry_run: bool):
 def action_move(source: str, destination: str, dry_run: bool):
 
     if not os.path.isfile(source):
-        exit_with_error("Cannot move dir", 3)
+        exit_with_error("Cannot move dir", CODE_ERROR)
 
     if os.path.isdir(destination):
         destination = destination + "/" + os.path.basename(source)
@@ -204,7 +203,7 @@ def main():
             continue
 
         if not os.path.isfile(input_file_path):
-            exit_with_error("Not file or dir", 3)
+            exit_with_error("Not file or dir", CODE_ERROR)
             break
 
         print("Trying to rename: " + input_file_name)
