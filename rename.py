@@ -2,11 +2,18 @@ import os
 import sys
 import hashlib
 import argparse
+from blake3 import blake3
 
 USER_ERROR = 3
 CODE_ERROR = 4
+SOFT_ERROR = 5
 
-VERSION = "v2.1.1"
+VERSION = "v2.2"
+
+# blake3 default lenght is 32, but to avoid long file names in windows I
+# recomend setting this to 16
+# https://learn.microsoft.com/windows/win32/fileio/maximum-file-path-limitation
+BLAKE3_LENGTH = 16
 
 
 def exit_with_error(error: str, err_nu: int):
@@ -15,11 +22,14 @@ def exit_with_error(error: str, err_nu: int):
 
 
 def hash_file(file_path: str, algorithm: str) -> str:
-    if os.path.isdir(file_path):
+    if not os.path.isfile(file_path):
         exit_with_error("Not a valid file:" + file_path, USER_ERROR)
+
+    hashlib.md5().hexdigest()
 
     dict_algorithm = {
         "md5": hashlib.md5,
+        "blake3": blake3,
         "sha1": hashlib.sha1,
         "sha224": hashlib.sha224,
         "sha256": hashlib.sha256,
@@ -30,12 +40,14 @@ def hash_file(file_path: str, algorithm: str) -> str:
     try:
         hashing = dict_algorithm[algorithm]()
     except KeyError:
-        exit_with_error("Could't compute file hash from" +
-                        file_path, CODE_ERROR)
+        exit_with_error("Error while chosing algorithm", CODE_ERROR)
 
     with open(file_path, 'rb') as file_bin:
         for block in iter(lambda: file_bin.read(4096), b''):
             hashing.update(block)
+
+    if algorithm == "blake3":
+        return hashing.hexdigest(length=BLAKE3_LENGTH)
 
     return hashing.hexdigest()
 
@@ -108,12 +120,12 @@ def main():
 
     parser.add_argument('-H',
                         '--hash',
-                        default='md5',
-                        choices=["md5", "sha1", "sha224", "sha256",
+                        default='blake3',
+                        choices=["md5", "blake3", "sha1", "sha224", "sha256",
                                  "sha384", "sha512"],
                         metavar="HASH",
                         help='hash that will be used: \
-                        [md5/sha1/sha224/sha256/sha384/sha512]')
+                        [md5/blake3/sha1/sha224/sha256/sha384/sha512')
 
     parser.add_argument('-i',
                         '--input',
@@ -148,7 +160,13 @@ def main():
     input_file_list = ''
     if os.path.isdir(argsp.input):
         input_folder = argsp.input
-        input_file_list = sorted(os.listdir(input_folder), key=len)
+
+        # TODO: Improve .git repo detection
+        if os.path.exists(input_folder + "/.git"):
+            exit_with_error("Input path is git repo!", SOFT_ERROR)
+
+        input_file_list = os.listdir(input_folder)
+
     elif os.path.isfile(argsp.input):
         input_folder = os.path.dirname(argsp.input)
         input_file_list = [os.path.basename(argsp.input)]
@@ -198,7 +216,7 @@ def main():
         output_file_name_only = hash_file(input_file_path, use_hash)
         # output_file_name = "01234567890abcdef01234567890abcd" + ".txt"
         output_file_name = output_file_name_only + \
-            os.path.splitext(input_file_path)[1]
+            os.path.splitext(input_file_path)[1].lower()
         output_file_path = output_file_basepath + output_file_name
 
         try_move(input_file_path, output_file_path, dry_run)
