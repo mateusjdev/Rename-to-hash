@@ -9,7 +9,7 @@ Requirements:
 - [blake3](https://pypi.org/project/blake3/) (if not present, defaults to `md5`)
 
 To run the script open a command prompt/shell and type in: `python rename.py -i PATH/TO/DIR`
-This will rename all files to the selected hashing algorithm (`blake3` is default).
+This will rename all files to the selected hashing algorithm (`blake3` is default, `md5` is fallback).
 
 > [!warning]
 > **Hashsum libraries can have collisions**: Some hashed files can be diferent and have the same checksum causing one of them to be deleted. You can learn an example of MD5 collision [here](https://www.mscs.dal.ca/~selinger/md5collision/).
@@ -26,13 +26,15 @@ This will rename all files to the selected hashing algorithm (`blake3` is defaul
 
 **Supported hashes:** `md5 / blake3 / sha1 / sha224 / sha256 / sha384 / sha512`
 
+[Algorithm Benchmarks](benchmark/BENCHMARK.md)
+
 ## TODO
 
 - Print only common path to logs
 - Add -r/--recursive
 - Add multiple -i/--inputs || Fix multiple -i/--inputs
 - Add blake2b
-- Remove sha1, sha224, sha384
+- Implement logging
 
 ## Possible Improvements
 
