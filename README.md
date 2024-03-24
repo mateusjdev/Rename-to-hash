@@ -6,7 +6,7 @@ Single python file to rename all files in a directory to their hash sums
 
 Requirements:
 - [python](https://www.python.org/)
-- [blake3](https://pypi.org/project/blake3/)
+- [blake3](https://pypi.org/project/blake3/) (if not present, defaults to `md5`)
 
 To run the script open a command prompt/shell and type in: `python rename.py -i PATH/TO/DIR`
 This will rename all files to the selected hashing algorithm (`blake3` is default).

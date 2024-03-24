@@ -2,13 +2,22 @@ import os
 import sys
 import hashlib
 import argparse
-from blake3 import blake3
+
+DEFAULT_ALGORITHM = "blake3"
+
+# blake3 not available on aarch64
+# https://github.com/oconnor663/blake3-py/issues/28
+try:
+    from blake3 import blake3
+except ModuleNotFoundError:
+    DEFAULT_ALGORITHM = "md5"
+
 
 USER_ERROR = 3
 CODE_ERROR = 4
 SOFT_ERROR = 5
 
-VERSION = "v2.2"
+VERSION = "v2.2.1"
 
 # blake3 default lenght is 32, but to avoid long file names in windows I
 # recomend setting this to 16
@@ -25,17 +34,17 @@ def hash_file(file_path: str, algorithm: str) -> str:
     if not os.path.isfile(file_path):
         exit_with_error("Not a valid file:" + file_path, USER_ERROR)
 
-    hashlib.md5().hexdigest()
-
     dict_algorithm = {
         "md5": hashlib.md5,
-        "blake3": blake3,
         "sha1": hashlib.sha1,
         "sha224": hashlib.sha224,
         "sha256": hashlib.sha256,
         "sha384": hashlib.sha384,
         "sha512": hashlib.sha512
     }
+
+    if "blake3" in sys.modules:
+        dict_algorithm["blake3"] = blake3
 
     try:
         hashing = dict_algorithm[algorithm]()
@@ -120,7 +129,7 @@ def main():
 
     parser.add_argument('-H',
                         '--hash',
-                        default='blake3',
+                        default=DEFAULT_ALGORITHM,
                         choices=["md5", "blake3", "sha1", "sha224", "sha256",
                                  "sha384", "sha512"],
                         metavar="HASH",
@@ -151,6 +160,12 @@ def main():
 
     dry_run = argsp.dry_run
     use_hash = argsp.hash
+
+    if use_hash == "blake3" and "blake3" not in sys.modules:
+        exit_with_error("blake3 not found", USER_ERROR)
+
+    if DEFAULT_ALGORITHM == "md5":
+        print("blake3 not found, defaulting to md5!")
 
     # Input
     # this part of code runs anyway because if user does not define
