@@ -55,6 +55,8 @@ class NameGenerator:
 
     @staticmethod
     def from_file_hash(file_path: str, algorithm: str) -> str:
+        """Generate a string of characters based on file and hash algorithm given as param"""
+
         if not os.path.isfile(file_path):
             exit_with_error("Not a valid file:" + file_path, ErrorExitCode.USER_ERROR)
 
@@ -90,21 +92,6 @@ class NameGenerator:
     # @staticmethod
     # def from_random() -> str:
 
-def is_path(path: str):
-    abs_path = os.path.abspath(path)
-    if os.path.isfile(abs_path) or os.path.isdir(abs_path):
-        return abs_path
-
-    exit_with_error('No such file or directory: ' + path, ErrorExitCode.USER_ERROR)
-
-
-def is_dir(path: str):
-    abs_path = os.path.abspath(path)
-    if os.path.isdir(abs_path):
-        return abs_path
-
-    exit_with_error('Not a valid directory: ' + path, ErrorExitCode.USER_ERROR)
-
 class RenameHelper:
     """Move files / renaming"""
 
@@ -120,7 +107,9 @@ class RenameHelper:
             os.rename(source, destination)
             self.__logger.info("%s --> %s", source, destination)
 
-    def move(self, source: str, destination: str):
+    # TODO: Add atributte 'append' to enable *_1 or return error,
+    # this will enable random() to decide if a new name need to be generated
+    def __check(self, source: str, destination: str):
         """Check if possible to rename/move, if True move"""
 
         if not os.path.isfile(source):
@@ -128,7 +117,7 @@ class RenameHelper:
 
         if os.path.isdir(destination):
             destination = destination + "/" + os.path.basename(source)
-            self.move(source, destination)
+            self.__check(source, destination)
             return
 
         if not os.path.exists(destination):
@@ -152,6 +141,36 @@ class RenameHelper:
             else:
                 self.__move(source, new_destination)
                 return
+
+    def with_hash(self, source: str, destination: str, hash_algorithm: str):
+        if not os.path.isfile(source):
+            exit_with_error("Not a file", ErrorExitCode.CODE_ERROR)
+
+        if not os.path.isdir(destination):
+            exit_with_error("Not a folder", ErrorExitCode.CODE_ERROR)
+
+        file_hash = NameGenerator.from_file_hash(source, hash_algorithm)
+        file_extension = os.path.splitext(source)[1].lower()
+
+        self.__check(source, destination +  file_hash + file_extension)
+
+    # TODO: merge fuzzy_renamer.py
+    # @staticmethod
+    # def random() -> str:
+
+def is_path(path: str):
+    abs_path = os.path.abspath(path)
+    if os.path.isfile(abs_path) or os.path.isdir(abs_path):
+        return abs_path
+
+    exit_with_error('No such file or directory: ' + path, ErrorExitCode.USER_ERROR)
+
+def is_dir(path: str):
+    abs_path = os.path.abspath(path)
+    if os.path.isdir(abs_path):
+        return abs_path
+
+    exit_with_error('Not a valid directory: ' + path, ErrorExitCode.USER_ERROR)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -291,16 +310,7 @@ def main():
 
         logger.debug("Trying to rename: %s", input_file_name)
 
-        # only hash_string without path, name or extensions
-        # return("01234567890abcdef01234567890abcd")
-        output_file_name_only = NameGenerator.from_file_hash(input_file_path, use_hash)
-        # output_file_name = "01234567890abcdef01234567890abcd" + ".txt"
-        output_file_name = output_file_name_only + \
-            os.path.splitext(input_file_path)[1].lower()
-        output_file_path = output_file_basepath + output_file_name
-
-        rename_helper.move(input_file_path, output_file_path)
-
+        rename_helper.with_hash(input_file_name, output_file_basepath, use_hash)
 
 if __name__ == "__main__":
     main()
