@@ -26,7 +26,7 @@ This will rename all files to the selected hashing algorithm (`blake3` is defaul
 
 **Supported hashes:** `md5 / blake3 / sha1 / sha224 / sha256 / sha384 / sha512`
 
-[Algorithm Benchmarks](benchmark/BENCHMARK.md)
+[Algorithm Benchmarks](benchmark/README.md)
 
 ## TODO
 
@@ -34,7 +34,6 @@ This will rename all files to the selected hashing algorithm (`blake3` is defaul
 - Add -r/--recursive
 - Add multiple -i/--inputs || Fix multiple -i/--inputs
 - Add blake2b
-- Implement logging
 
 ## Possible Improvements
 

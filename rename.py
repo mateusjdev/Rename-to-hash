@@ -2,6 +2,7 @@ import os
 import sys
 import hashlib
 import argparse
+import logging
 
 DEFAULT_ALGORITHM = "blake3"
 
@@ -17,16 +18,21 @@ USER_ERROR = 3
 CODE_ERROR = 4
 SOFT_ERROR = 5
 
-VERSION = "v2.2.1"
+VERSION = "v2.2.2"
 
 # blake3 default lenght is 32, but to avoid long file names in windows I
 # recomend setting this to 16
 # https://learn.microsoft.com/windows/win32/fileio/maximum-file-path-limitation
 BLAKE3_LENGTH = 16
 
+# TODO: better format for logging (https://stackoverflow.com/q/384076)
+LOGGING_FORMAT = 'rename.py: %(message)s'
 
+logger = logging.getLogger(__name__)
+
+# TODO: raise Exception
 def exit_with_error(error: str, err_nu: int):
-    print("ERROR: " + error)
+    logger.critical("ERROR: %s", error)
     sys.exit(err_nu)
 
 
@@ -79,10 +85,10 @@ def is_dir(path: str):
 
 def action_move(source: str, destination: str, dry_run: bool):
     if dry_run:
-        print('(dry-run) ' + source + ' --> ' + destination)
+        logger.info("(dry-run)%s --> %s", source, destination)
     else:
         os.rename(source, destination)
-        print(source + ' --> ' + destination)
+        logger.info("%s --> %s", source, destination)
 
 
 def try_move(source: str, destination: str, dry_run: bool):
@@ -100,7 +106,7 @@ def try_move(source: str, destination: str, dry_run: bool):
         return
 
     if os.path.samefile(source, destination):
-        print("file " + source + " already hashed")
+        logger.info("file %s already hashed", source)
         return
 
     iterator = 1
@@ -110,7 +116,7 @@ def try_move(source: str, destination: str, dry_run: bool):
         new_destination = prefix_path + str(iterator) + postfix_path
         if os.path.exists(new_destination):
             if os.path.samefile(source, new_destination):
-                print("file " + source + " already hashed")
+                logger.info("file %s already hashed", source)
                 return
             iterator = iterator + 1
         else:
@@ -120,12 +126,23 @@ def try_move(source: str, destination: str, dry_run: bool):
 def main():
     parser = argparse.ArgumentParser(
         description="Single python file to rename all files in a directory to \
-            their hash sums.")
+            their hash sums.", add_help=True, allow_abbrev=False)
 
     parser.add_argument('-d',
                         '--dry-run',
+                        default=False,
                         action='store_true',
                         help='dry run, doesn\'t rename or delete files')
+
+    parser.add_argument('--debug',
+                        default=False,
+                        action='store_true',
+                        help='Print debug logs')
+
+    parser.add_argument('--silent',
+                        default=False,
+                        action='store_true',
+                        help='SHHHHHHH!')
 
     parser.add_argument('-H',
                         '--hash',
@@ -158,14 +175,31 @@ def main():
 
     argsp = parser.parse_args()
 
+    logging.basicConfig(format=LOGGING_FORMAT, level=logging.INFO)
+
+    debug = argsp.debug
+
+    if debug:
+        logger.setLevel(logging.DEBUG)
+
+    if argsp.silent:
+        if argsp.debug:
+            exit_with_error("Both --silent and --debug flags can not be" +
+                            "declared together", USER_ERROR)
+        logger.setLevel(logging.WARNING)
+
     dry_run = argsp.dry_run
+
+    if dry_run or debug:
+        logger.info(vars(argsp))
+
     use_hash = argsp.hash
 
     if use_hash == "blake3" and "blake3" not in sys.modules:
         exit_with_error("blake3 not found", USER_ERROR)
 
     if DEFAULT_ALGORITHM == "md5":
-        print("blake3 not found, defaulting to md5!")
+        logger.warning("blake3 not found, defaulting to md5!")
 
     # Input
     # this part of code runs anyway because if user does not define
@@ -187,9 +221,6 @@ def main():
         input_file_list = [os.path.basename(argsp.input)]
 
     output_folder = input_folder if argsp.output is None else argsp.output
-
-    if dry_run:
-        print(vars(argsp))
 
     # input_file_path		= /in/input.txt
     # input_file_basepath	= /in/
@@ -213,18 +244,18 @@ def main():
         # TODO: check if input_file_name == argv[0]
         # argv[0] == 'python rename.py' || './renamy.py' || ...
         if input_file_name == "rename.py":
-            print("Skipping source file " + input_file_name)
+            logger.info("Skipping source file %s", input_file_name)
             continue
 
         if os.path.isdir(input_file_path):
-            print("Skipping directory " + input_file_name)
+            logger.info("Skipping directory %s", input_file_name)
             continue
 
         if not os.path.isfile(input_file_path):
             exit_with_error("Not file or dir", CODE_ERROR)
             break
 
-        print("Trying to rename: " + input_file_name)
+        logger.debug("Trying to rename: %s", input_file_name)
 
         # only hash_string without path, name or extensions
         # return("01234567890abcdef01234567890abcd")
