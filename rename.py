@@ -4,21 +4,34 @@ import hashlib
 import argparse
 import logging
 
-DEFAULT_ALGORITHM = "blake3"
+
+class HashAlgorithm:
+    """List of Hashing Algorithms"""
+    SHA512 = "sha512"
+    SHA384 = "sha384"
+    SHA256 = "sha256"
+    SHA224 = "sha224"
+    SHA1  = "sha1"
+    MD5 = "md5"
+    BLAKE3 = "blake3"
+    BLAKE2B = "blake2"
+
+class ErrorExitCode:
+    """List of Error Exit Codes"""
+    USER_ERROR = 3
+    CODE_ERROR = 4
+    SOFT_ERROR = 5
+
+DEFAULT_ALGORITHM = HashAlgorithm.BLAKE3
 
 # blake3 not available on aarch64
 # https://github.com/oconnor663/blake3-py/issues/28
 try:
     from blake3 import blake3
 except ModuleNotFoundError:
-    DEFAULT_ALGORITHM = "md5"
+    DEFAULT_ALGORITHM = HashAlgorithm.MD5
 
-
-USER_ERROR = 3
-CODE_ERROR = 4
-SOFT_ERROR = 5
-
-VERSION = "v2.3"
+VERSION = "v2.3.1"
 
 # blake3 default lenght is 32, but to avoid long file names in windows I
 # recomend setting this to 16
@@ -37,35 +50,34 @@ def exit_with_error(error: str, err_nu: int):
     logger.critical("ERROR: %s", error)
     sys.exit(err_nu)
 
-
 def hash_file(file_path: str, algorithm: str) -> str:
     if not os.path.isfile(file_path):
-        exit_with_error("Not a valid file:" + file_path, USER_ERROR)
+        exit_with_error("Not a valid file:" + file_path, ErrorExitCode.USER_ERROR)
 
     dict_algorithm = {
-        "md5": hashlib.md5(),
-        "sha1": hashlib.sha1(),
-        "sha224": hashlib.sha224(),
-        "sha256": hashlib.sha256(),
-        "sha384": hashlib.sha384(),
-        "sha512": hashlib.sha512(),
-        "blake2": hashlib.blake2b(digest_size=BLAKE_DIGEST_SIZE)
+        HashAlgorithm.MD5: hashlib.md5(),
+        HashAlgorithm.SHA1: hashlib.sha1(),
+        HashAlgorithm.SHA224: hashlib.sha224(),
+        HashAlgorithm.SHA256: hashlib.sha256(),
+        HashAlgorithm.SHA384: hashlib.sha384(),
+        HashAlgorithm.SHA512: hashlib.sha512(),
+        HashAlgorithm.BLAKE2B: hashlib.blake2b(digest_size=BLAKE_DIGEST_SIZE)
     }
 
     if "blake3" in sys.modules:
         # pylint: disable=E1102
-        dict_algorithm["blake3"] = blake3()
+        dict_algorithm[HashAlgorithm.BLAKE3] = blake3()
 
     try:
         hashing = dict_algorithm[algorithm]
     except KeyError:
-        exit_with_error("Error while chosing algorithm", CODE_ERROR)
+        exit_with_error("Error while chosing algorithm", ErrorExitCode.CODE_ERROR)
 
     with open(file_path, 'rb') as file_bin:
         for block in iter(lambda: file_bin.read(4096), b''):
             hashing.update(block)
 
-    if algorithm == "blake3":
+    if algorithm == HashAlgorithm.BLAKE3:
         return hashing.hexdigest(length=BLAKE_DIGEST_SIZE)
 
     return hashing.hexdigest()
@@ -76,7 +88,7 @@ def is_path(path: str):
     if os.path.isfile(abs_path) or os.path.isdir(abs_path):
         return abs_path
 
-    exit_with_error('No such file or directory: ' + path, USER_ERROR)
+    exit_with_error('No such file or directory: ' + path, ErrorExitCode.USER_ERROR)
 
 
 def is_dir(path: str):
@@ -84,7 +96,7 @@ def is_dir(path: str):
     if os.path.isdir(abs_path):
         return abs_path
 
-    exit_with_error('Not a valid directory: ' + path, USER_ERROR)
+    exit_with_error('Not a valid directory: ' + path, ErrorExitCode.USER_ERROR)
 
 
 def action_move(source: str, destination: str, dry_run: bool):
@@ -98,7 +110,7 @@ def action_move(source: str, destination: str, dry_run: bool):
 def try_move(source: str, destination: str, dry_run: bool):
 
     if not os.path.isfile(source):
-        exit_with_error("Cannot move dir", CODE_ERROR)
+        exit_with_error("Cannot move dir", ErrorExitCode.CODE_ERROR)
 
     if os.path.isdir(destination):
         destination = destination + "/" + os.path.basename(source)
@@ -151,8 +163,10 @@ def main():
     parser.add_argument('-H',
                         '--hash',
                         default=DEFAULT_ALGORITHM,
-                        choices=["md5", "blake3", "blake2", "sha1", "sha224", "sha256",
-                                 "sha384", "sha512"],
+                        choices=[HashAlgorithm.BLAKE3, HashAlgorithm.BLAKE2B,
+                                 HashAlgorithm.MD5, HashAlgorithm.SHA1,
+                                HashAlgorithm.SHA224, HashAlgorithm.SHA256,
+                                HashAlgorithm.SHA384, HashAlgorithm.SHA512],
                         metavar="HASH",
                         help='hash that will be used: \
                         [md5/blake3/blake2/sha1/sha224/sha256/sha384/sha512')
@@ -189,7 +203,7 @@ def main():
     if argsp.silent:
         if argsp.debug:
             exit_with_error("Both --silent and --debug flags can not be" +
-                            "declared together", USER_ERROR)
+                            "declared together", ErrorExitCode.USER_ERROR)
         logger.setLevel(logging.WARNING)
 
     dry_run = argsp.dry_run
@@ -199,10 +213,10 @@ def main():
 
     use_hash = argsp.hash
 
-    if use_hash == "blake3" and "blake3" not in sys.modules:
-        exit_with_error("blake3 not found", USER_ERROR)
+    if use_hash == HashAlgorithm.BLAKE3 and "blake3" not in sys.modules:
+        exit_with_error("blake3 not found", ErrorExitCode.USER_ERROR)
 
-    if DEFAULT_ALGORITHM == "md5":
+    if DEFAULT_ALGORITHM == HashAlgorithm.MD5:
         logger.warning("blake3 not found, defaulting to md5!")
 
     # Input
@@ -216,7 +230,7 @@ def main():
 
         # TODO: Improve .git repo detection
         if os.path.exists(input_folder + "/.git"):
-            exit_with_error("Input path is git repo!", SOFT_ERROR)
+            exit_with_error("Input path is git repo!", ErrorExitCode.SOFT_ERROR)
 
         input_file_list = os.listdir(input_folder)
 
@@ -256,7 +270,7 @@ def main():
             continue
 
         if not os.path.isfile(input_file_path):
-            exit_with_error("Not file or dir", CODE_ERROR)
+            exit_with_error("Not file or dir", ErrorExitCode.CODE_ERROR)
             break
 
         logger.debug("Trying to rename: %s", input_file_name)
