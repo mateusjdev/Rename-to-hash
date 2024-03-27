@@ -31,7 +31,7 @@ try:
 except ModuleNotFoundError:
     DEFAULT_ALGORITHM = HashAlgorithm.MD5
 
-VERSION = "v2.3.1"
+VERSION = "v2.3.2"
 
 # blake3 default lenght is 32, but to avoid long file names in windows I
 # recomend setting this to 16
@@ -50,38 +50,45 @@ def exit_with_error(error: str, err_nu: int):
     logger.critical("ERROR: %s", error)
     sys.exit(err_nu)
 
-def hash_file(file_path: str, algorithm: str) -> str:
-    if not os.path.isfile(file_path):
-        exit_with_error("Not a valid file:" + file_path, ErrorExitCode.USER_ERROR)
+class NameGenerator:
+    """Generate a string based on method/param"""
 
-    dict_algorithm = {
-        HashAlgorithm.MD5: hashlib.md5(),
-        HashAlgorithm.SHA1: hashlib.sha1(),
-        HashAlgorithm.SHA224: hashlib.sha224(),
-        HashAlgorithm.SHA256: hashlib.sha256(),
-        HashAlgorithm.SHA384: hashlib.sha384(),
-        HashAlgorithm.SHA512: hashlib.sha512(),
-        HashAlgorithm.BLAKE2B: hashlib.blake2b(digest_size=BLAKE_DIGEST_SIZE)
-    }
+    @staticmethod
+    def from_file_hash(file_path: str, algorithm: str) -> str:
+        if not os.path.isfile(file_path):
+            exit_with_error("Not a valid file:" + file_path, ErrorExitCode.USER_ERROR)
 
-    if "blake3" in sys.modules:
-        # pylint: disable=E1102
-        dict_algorithm[HashAlgorithm.BLAKE3] = blake3()
+        dict_algorithm = {
+            HashAlgorithm.MD5: hashlib.md5(),
+            HashAlgorithm.SHA1: hashlib.sha1(),
+            HashAlgorithm.SHA224: hashlib.sha224(),
+            HashAlgorithm.SHA256: hashlib.sha256(),
+            HashAlgorithm.SHA384: hashlib.sha384(),
+            HashAlgorithm.SHA512: hashlib.sha512(),
+            HashAlgorithm.BLAKE2B: hashlib.blake2b(digest_size=BLAKE_DIGEST_SIZE)
+        }
 
-    try:
-        hashing = dict_algorithm[algorithm]
-    except KeyError:
-        exit_with_error("Error while chosing algorithm", ErrorExitCode.CODE_ERROR)
+        if "blake3" in sys.modules:
+            # pylint: disable=E1102
+            dict_algorithm[HashAlgorithm.BLAKE3] = blake3()
 
-    with open(file_path, 'rb') as file_bin:
-        for block in iter(lambda: file_bin.read(4096), b''):
-            hashing.update(block)
+        try:
+            hashing = dict_algorithm[algorithm]
+        except KeyError:
+            exit_with_error("Error while chosing algorithm", ErrorExitCode.CODE_ERROR)
 
-    if algorithm == HashAlgorithm.BLAKE3:
-        return hashing.hexdigest(length=BLAKE_DIGEST_SIZE)
+        with open(file_path, 'rb') as file_bin:
+            for block in iter(lambda: file_bin.read(4096), b''):
+                hashing.update(block)
 
-    return hashing.hexdigest()
+        if algorithm == HashAlgorithm.BLAKE3:
+            return hashing.hexdigest(length=BLAKE_DIGEST_SIZE)
 
+        return hashing.hexdigest()
+
+    # TODO: merge fuzzy_renamer.py
+    # @staticmethod
+    # def from_random() -> str:
 
 def is_path(path: str):
     abs_path = os.path.abspath(path)
@@ -98,46 +105,53 @@ def is_dir(path: str):
 
     exit_with_error('Not a valid directory: ' + path, ErrorExitCode.USER_ERROR)
 
+class RenameHelper:
+    """Move files / renaming"""
 
-def action_move(source: str, destination: str, dry_run: bool):
-    if dry_run:
-        logger.info("(dry-run)%s --> %s", source, destination)
-    else:
-        os.rename(source, destination)
-        logger.info("%s --> %s", source, destination)
+    def __init__(self, dry_run: bool, _logger):
+        self.__dry_run = dry_run
+        self.__logger = _logger
 
-
-def try_move(source: str, destination: str, dry_run: bool):
-
-    if not os.path.isfile(source):
-        exit_with_error("Cannot move dir", ErrorExitCode.CODE_ERROR)
-
-    if os.path.isdir(destination):
-        destination = destination + "/" + os.path.basename(source)
-        try_move(source, destination, dry_run)
-        return
-
-    if not os.path.exists(destination):
-        action_move(source, destination, dry_run)
-        return
-
-    if os.path.samefile(source, destination):
-        logger.info("file %s already hashed", source)
-        return
-
-    iterator = 1
-    prefix_path = os.path.splitext(destination)[0] + "_"
-    postfix_path = os.path.splitext(destination)[1]
-    while True:
-        new_destination = prefix_path + str(iterator) + postfix_path
-        if os.path.exists(new_destination):
-            if os.path.samefile(source, new_destination):
-                logger.info("file %s already hashed", source)
-                return
-            iterator = iterator + 1
+    def __move(self, source: str, destination: str):
+        """Move file / Rename"""
+        if self.__dry_run:
+            self.__logger.info("(dry-run)%s --> %s", source, destination)
         else:
-            action_move(source, new_destination, dry_run)
+            os.rename(source, destination)
+            self.__logger.info("%s --> %s", source, destination)
+
+    def move(self, source: str, destination: str):
+        """Check if possible to rename/move, if True move"""
+
+        if not os.path.isfile(source):
+            exit_with_error("Cannot move dir", ErrorExitCode.CODE_ERROR)
+
+        if os.path.isdir(destination):
+            destination = destination + "/" + os.path.basename(source)
+            self.move(source, destination)
             return
+
+        if not os.path.exists(destination):
+            self.__move(source, destination)
+            return
+
+        if os.path.samefile(source, destination):
+            self.__logger.info("file %s already hashed", source)
+            return
+
+        iterator = 1
+        prefix_path = os.path.splitext(destination)[0] + "_"
+        postfix_path = os.path.splitext(destination)[1]
+        while True:
+            new_destination = prefix_path + str(iterator) + postfix_path
+            if os.path.exists(new_destination):
+                if os.path.samefile(source, new_destination):
+                    self.__logger.info("file %s already hashed", source)
+                    return
+                iterator = iterator + 1
+            else:
+                self.__move(source, new_destination)
+                return
 
 def main():
     parser = argparse.ArgumentParser(
@@ -254,6 +268,8 @@ def main():
     output_file_basepath = output_folder + "/"
     input_file_basepath = input_folder + "/"
 
+    rename_helper = RenameHelper(dry_run, logger)
+
     for input_file_name in input_file_list:
 
         # "/in/" + "input.txt" -> "/in/input.txt"
@@ -277,13 +293,13 @@ def main():
 
         # only hash_string without path, name or extensions
         # return("01234567890abcdef01234567890abcd")
-        output_file_name_only = hash_file(input_file_path, use_hash)
+        output_file_name_only = NameGenerator.from_file_hash(input_file_path, use_hash)
         # output_file_name = "01234567890abcdef01234567890abcd" + ".txt"
         output_file_name = output_file_name_only + \
             os.path.splitext(input_file_path)[1].lower()
         output_file_path = output_file_basepath + output_file_name
 
-        try_move(input_file_path, output_file_path, dry_run)
+        rename_helper.move(input_file_path, output_file_path)
 
 
 if __name__ == "__main__":
