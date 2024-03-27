@@ -33,7 +33,6 @@ This will rename all files to the selected hashing algorithm (`blake3` is defaul
 - Print only common path to logs
 - Add -r/--recursive
 - Add multiple -i/--inputs || Fix multiple -i/--inputs
-- Add blake2b
 
 ## Possible Improvements
 

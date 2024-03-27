@@ -18,12 +18,14 @@ USER_ERROR = 3
 CODE_ERROR = 4
 SOFT_ERROR = 5
 
-VERSION = "v2.2.2"
+VERSION = "v2.3"
 
 # blake3 default lenght is 32, but to avoid long file names in windows I
 # recomend setting this to 16
+# obs: in blake2b (64 as default) setting this as 16 will generate a totally
+# diferent hash
 # https://learn.microsoft.com/windows/win32/fileio/maximum-file-path-limitation
-BLAKE3_LENGTH = 16
+BLAKE_DIGEST_SIZE = 16
 
 # TODO: better format for logging (https://stackoverflow.com/q/384076)
 LOGGING_FORMAT = 'rename.py: %(message)s'
@@ -41,19 +43,21 @@ def hash_file(file_path: str, algorithm: str) -> str:
         exit_with_error("Not a valid file:" + file_path, USER_ERROR)
 
     dict_algorithm = {
-        "md5": hashlib.md5,
-        "sha1": hashlib.sha1,
-        "sha224": hashlib.sha224,
-        "sha256": hashlib.sha256,
-        "sha384": hashlib.sha384,
-        "sha512": hashlib.sha512
+        "md5": hashlib.md5(),
+        "sha1": hashlib.sha1(),
+        "sha224": hashlib.sha224(),
+        "sha256": hashlib.sha256(),
+        "sha384": hashlib.sha384(),
+        "sha512": hashlib.sha512(),
+        "blake2": hashlib.blake2b(digest_size=BLAKE_DIGEST_SIZE)
     }
 
     if "blake3" in sys.modules:
-        dict_algorithm["blake3"] = blake3
+        # pylint: disable=E1102
+        dict_algorithm["blake3"] = blake3()
 
     try:
-        hashing = dict_algorithm[algorithm]()
+        hashing = dict_algorithm[algorithm]
     except KeyError:
         exit_with_error("Error while chosing algorithm", CODE_ERROR)
 
@@ -62,7 +66,7 @@ def hash_file(file_path: str, algorithm: str) -> str:
             hashing.update(block)
 
     if algorithm == "blake3":
-        return hashing.hexdigest(length=BLAKE3_LENGTH)
+        return hashing.hexdigest(length=BLAKE_DIGEST_SIZE)
 
     return hashing.hexdigest()
 
@@ -147,11 +151,11 @@ def main():
     parser.add_argument('-H',
                         '--hash',
                         default=DEFAULT_ALGORITHM,
-                        choices=["md5", "blake3", "sha1", "sha224", "sha256",
+                        choices=["md5", "blake3", "blake2", "sha1", "sha224", "sha256",
                                  "sha384", "sha512"],
                         metavar="HASH",
                         help='hash that will be used: \
-                        [md5/blake3/sha1/sha224/sha256/sha384/sha512')
+                        [md5/blake3/blake2/sha1/sha224/sha256/sha384/sha512')
 
     parser.add_argument('-i',
                         '--input',
