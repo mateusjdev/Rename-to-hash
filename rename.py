@@ -3,9 +3,10 @@ import sys
 import hashlib
 import argparse
 import logging
+import string
+import random
 
-
-class HashAlgorithm:
+class RenameAlgorithm:
     """List of Hashing Algorithms"""
     SHA512 = "sha512"
     SHA384 = "sha384"
@@ -15,6 +16,7 @@ class HashAlgorithm:
     MD5 = "md5"
     BLAKE3 = "blake3"
     BLAKE2B = "blake2"
+    FUZZY = "fuzzy"
 
 class ErrorExitCode:
     """List of Error Exit Codes"""
@@ -22,16 +24,16 @@ class ErrorExitCode:
     CODE_ERROR = 4
     SOFT_ERROR = 5
 
-DEFAULT_ALGORITHM = HashAlgorithm.BLAKE3
+DEFAULT_ALGORITHM = RenameAlgorithm.BLAKE3
 
 # blake3 not available on aarch64
 # https://github.com/oconnor663/blake3-py/issues/28
 try:
     from blake3 import blake3
 except ModuleNotFoundError:
-    DEFAULT_ALGORITHM = HashAlgorithm.MD5
+    DEFAULT_ALGORITHM = RenameAlgorithm.MD5
 
-VERSION = "v2.3.2"
+VERSION = "v2.4"
 
 # blake3 default lenght is 32, but to avoid long file names in windows I
 # recomend setting this to 16
@@ -40,12 +42,19 @@ VERSION = "v2.3.2"
 # https://learn.microsoft.com/windows/win32/fileio/maximum-file-path-limitation
 BLAKE_DIGEST_SIZE = 16
 
+
+# TODO: merge NameGenerator and Rename Helper
+# 62^16 - setting this very low can cause problems
+DICTIONARY = string.digits + string.ascii_letters
+FILENAME_SIZE = 16
+
 # TODO: better format for logging (https://stackoverflow.com/q/384076)
 LOGGING_FORMAT = 'rename.py: %(message)s'
 
 logger = logging.getLogger(__name__)
 
 # TODO: raise Exception
+# TODO: use kwargs
 def exit_with_error(error: str, err_nu: int):
     logger.critical("ERROR: %s", error)
     sys.exit(err_nu)
@@ -61,18 +70,18 @@ class NameGenerator:
             exit_with_error("Not a valid file:" + file_path, ErrorExitCode.USER_ERROR)
 
         dict_algorithm = {
-            HashAlgorithm.MD5: hashlib.md5(),
-            HashAlgorithm.SHA1: hashlib.sha1(),
-            HashAlgorithm.SHA224: hashlib.sha224(),
-            HashAlgorithm.SHA256: hashlib.sha256(),
-            HashAlgorithm.SHA384: hashlib.sha384(),
-            HashAlgorithm.SHA512: hashlib.sha512(),
-            HashAlgorithm.BLAKE2B: hashlib.blake2b(digest_size=BLAKE_DIGEST_SIZE)
+            RenameAlgorithm.MD5: hashlib.md5(),
+            RenameAlgorithm.SHA1: hashlib.sha1(),
+            RenameAlgorithm.SHA224: hashlib.sha224(),
+            RenameAlgorithm.SHA256: hashlib.sha256(),
+            RenameAlgorithm.SHA384: hashlib.sha384(),
+            RenameAlgorithm.SHA512: hashlib.sha512(),
+            RenameAlgorithm.BLAKE2B: hashlib.blake2b(digest_size=BLAKE_DIGEST_SIZE)
         }
 
         if "blake3" in sys.modules:
             # pylint: disable=E1102
-            dict_algorithm[HashAlgorithm.BLAKE3] = blake3()
+            dict_algorithm[RenameAlgorithm.BLAKE3] = blake3()
 
         try:
             hashing = dict_algorithm[algorithm]
@@ -83,14 +92,15 @@ class NameGenerator:
             for block in iter(lambda: file_bin.read(4096), b''):
                 hashing.update(block)
 
-        if algorithm == HashAlgorithm.BLAKE3:
+        if algorithm == RenameAlgorithm.BLAKE3:
             return hashing.hexdigest(length=BLAKE_DIGEST_SIZE)
 
         return hashing.hexdigest()
 
-    # TODO: merge fuzzy_renamer.py
-    # @staticmethod
-    # def from_random() -> str:
+    @staticmethod
+    def from_random() -> str:
+        return ''.join(random.choices(DICTIONARY, k=FILENAME_SIZE))
+
 
 class RenameHelper:
     """Move files / renaming"""
@@ -107,56 +117,93 @@ class RenameHelper:
             os.rename(source, destination)
             self.__logger.info("%s --> %s", source, destination)
 
-    # TODO: Add atributte 'append' to enable *_1 or return error,
-    # this will enable random() to decide if a new name need to be generated
-    def __check(self, source: str, destination: str):
+    def _check(self, source: str, destination: str) -> int:
         """Check if possible to rename/move, if True move"""
 
+        # source exists?
         if not os.path.isfile(source):
             exit_with_error("Cannot move dir", ErrorExitCode.CODE_ERROR)
 
-        if os.path.isdir(destination):
-            destination = destination + "/" + os.path.basename(source)
-            self.__check(source, destination)
-            return
+        # destination path exists?
+        destination_dir = os.path.dirname(destination)
+        if not os.path.isdir(destination_dir):
+            exit_with_error("Cannot move to dir" + destination_dir, ErrorExitCode.CODE_ERROR)
 
+        # filename with future source name exists?
+        # if not move and return OK
         if not os.path.exists(destination):
             self.__move(source, destination)
             return
 
+        # are source and destination the same?
+        # if yes do nothing and return OK
         if os.path.samefile(source, destination):
             self.__logger.info("file %s already hashed", source)
             return
 
+        # dir ok to move file, but a equal filename already exists
+        # FileExistsError: [Errno 17]
+        return 17
+
+class HashRenameHelper(RenameHelper):
+    """Rename files using file hashsum"""
+
+    def __init__(self, dry_run: bool, _logger, hash_algorithm: str):
+        super().__init__(dry_run, _logger)
+        self.__hash_algorithm = hash_algorithm
+
+    def rename(self, source_file_path: str, dest_dir_path: str):
+        if not os.path.isfile(source_file_path):
+            exit_with_error(f"Not a file: '{source_file_path}'", ErrorExitCode.CODE_ERROR)
+
+        if not os.path.isdir(dest_dir_path):
+            exit_with_error(f"Not a folder: '{dest_dir_path}'", ErrorExitCode.CODE_ERROR)
+
+        file_name = NameGenerator.from_file_hash(source_file_path, self.__hash_algorithm)
+        file_extension = os.path.splitext(source_file_path)[1].lower()
+
+        # return 0 = return
+        # return >0 = continue
+        if not super()._check(source_file_path, dest_dir_path +  file_name + file_extension):
+            return
+
+        # 17 FileExistsError
         iterator = 1
-        prefix_path = os.path.splitext(destination)[0] + "_"
-        postfix_path = os.path.splitext(destination)[1]
+        # Limit maybe? for i in range(1,1000)?
         while True:
-            new_destination = prefix_path + str(iterator) + postfix_path
-            if os.path.exists(new_destination):
-                if os.path.samefile(source, new_destination):
-                    self.__logger.info("file %s already hashed", source)
-                    return
-                iterator = iterator + 1
-            else:
-                self.__move(source, new_destination)
+            # return 0 = return
+            file_postfix = "_" + str(iterator)
+            if not super()._check(source_file_path, dest_dir_path +  file_name +
+                            file_postfix + file_extension):
                 return
+            # return >0 = continue
+            iterator = iterator + 1
+            continue
 
-    def with_hash(self, source: str, destination: str, hash_algorithm: str):
-        if not os.path.isfile(source):
-            exit_with_error("Not a file", ErrorExitCode.CODE_ERROR)
 
-        if not os.path.isdir(destination):
-            exit_with_error("Not a folder", ErrorExitCode.CODE_ERROR)
+class RandomRenameHelper(RenameHelper):
+    """Rename files using random characters"""
 
-        file_hash = NameGenerator.from_file_hash(source, hash_algorithm)
-        file_extension = os.path.splitext(source)[1].lower()
+    # TODO: Add atributte 'LENGHT'
+    def rename(self, source_file_path: str, dest_dir_path: str):
+        if not os.path.isfile(source_file_path):
+            exit_with_error(f"Not a file: '{source_file_path}'", ErrorExitCode.CODE_ERROR)
 
-        self.__check(source, destination +  file_hash + file_extension)
+        if not os.path.isdir(dest_dir_path):
+            exit_with_error(f"Not a folder: '{dest_dir_path}'", ErrorExitCode.CODE_ERROR)
 
-    # TODO: merge fuzzy_renamer.py
-    # @staticmethod
-    # def random() -> str:
+        file_extension = os.path.splitext(source_file_path)[1].lower()
+
+        # Limit maybe? for i in range(1,1000)?
+        while True:
+            file_name = NameGenerator.from_random()
+            # return 0 = return
+            if not super()._check(source_file_path, dest_dir_path +  file_name + file_extension):
+                return
+            # return >0 = continue
+            # 17 FileExistsError
+            continue
+
 
 def is_path(path: str):
     abs_path = os.path.abspath(path)
@@ -196,10 +243,11 @@ def main():
     parser.add_argument('-H',
                         '--hash',
                         default=DEFAULT_ALGORITHM,
-                        choices=[HashAlgorithm.BLAKE3, HashAlgorithm.BLAKE2B,
-                                 HashAlgorithm.MD5, HashAlgorithm.SHA1,
-                                HashAlgorithm.SHA224, HashAlgorithm.SHA256,
-                                HashAlgorithm.SHA384, HashAlgorithm.SHA512],
+                        choices=[RenameAlgorithm.BLAKE3, RenameAlgorithm.BLAKE2B,
+                                 RenameAlgorithm.MD5, RenameAlgorithm.SHA1,
+                                RenameAlgorithm.SHA224, RenameAlgorithm.SHA256,
+                                RenameAlgorithm.SHA384, RenameAlgorithm.SHA512,
+                                RenameAlgorithm.FUZZY],
                         metavar="HASH",
                         help='hash that will be used: \
                         [md5/blake3/blake2/sha1/sha224/sha256/sha384/sha512')
@@ -246,10 +294,10 @@ def main():
 
     use_hash = argsp.hash
 
-    if use_hash == HashAlgorithm.BLAKE3 and "blake3" not in sys.modules:
+    if use_hash == RenameAlgorithm.BLAKE3 and "blake3" not in sys.modules:
         exit_with_error("blake3 not found", ErrorExitCode.USER_ERROR)
 
-    if DEFAULT_ALGORITHM == HashAlgorithm.MD5:
+    if DEFAULT_ALGORITHM == RenameAlgorithm.MD5:
         logger.warning("blake3 not found, defaulting to md5!")
 
     # Input
@@ -271,6 +319,10 @@ def main():
         input_folder = os.path.dirname(argsp.input)
         input_file_list = [os.path.basename(argsp.input)]
 
+    if not input_file_list:
+        logger.info("No files, nothing to do!")
+        return
+
     output_folder = input_folder if argsp.output is None else argsp.output
 
     # input_file_path		= /in/input.txt
@@ -287,7 +339,8 @@ def main():
     output_file_basepath = output_folder + "/"
     input_file_basepath = input_folder + "/"
 
-    rename_helper = RenameHelper(dry_run, logger)
+    rename_helper = RandomRenameHelper(dry_run, logger) if use_hash == RenameAlgorithm.FUZZY \
+        else HashRenameHelper(dry_run, logger, use_hash)
 
     for input_file_name in input_file_list:
 
@@ -310,7 +363,7 @@ def main():
 
         logger.debug("Trying to rename: %s", input_file_name)
 
-        rename_helper.with_hash(input_file_name, output_file_basepath, use_hash)
+        rename_helper.rename(input_file_path, output_file_basepath)
 
 if __name__ == "__main__":
     main()
