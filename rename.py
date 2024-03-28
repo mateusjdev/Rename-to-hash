@@ -60,6 +60,9 @@ class RenameHelper:
             os.rename(source, destination)
             self.__logger.info("%s --> %s", source, destination)
 
+    def getLogger(self):
+        return self.__logger
+
     def _check(self, source: str, destination: str) -> int:
         """Check if possible to rename/move, if True move"""
 
@@ -76,13 +79,13 @@ class RenameHelper:
         # if not move and return OK
         if not os.path.exists(destination):
             self.__move(source, destination)
-            return
+            return 0
 
         # are source and destination the same?
         # if yes do nothing and return OK
         if os.path.samefile(source, destination):
             self.__logger.info("file %s already hashed", source)
-            return
+            return 0
 
         # dir ok to move file, but a equal filename already exists
         # FileExistsError: [Errno 17]
@@ -107,11 +110,14 @@ class HashRenameHelper(RenameHelper):
         super().__init__(dry_run, _logger)
 
         if hash_algorithm == RenameAlgorithm.NOTSET and not self.__IMPORTED_BLAKE3:
-            self.__logger.warning("blake3 not found, defaulting to md5!")
+            super().getLogger().warning("blake3 not found, defaulting to md5!")
             self.__hash_algorithm = RenameAlgorithm.MD5
+            return
 
         self.__hash_algorithm = RenameAlgorithm.BLAKE3 if hash_algorithm == RenameAlgorithm.NOTSET \
             else hash_algorithm
+
+        super().getLogger().debug("Hash Algorithm: %s", self.__hash_algorithm)
 
     def __name_generator(self, file_path: str) -> str:
         """Generate a string of characters based on file and hash algorithm given as param"""
