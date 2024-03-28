@@ -60,7 +60,7 @@ class RenameHelper:
             os.rename(source, destination)
             self.__logger.info("%s --> %s", source, destination)
 
-    def getLogger(self):
+    def get_logger(self):
         return self.__logger
 
     def _check(self, source: str, destination: str) -> int:
@@ -99,25 +99,30 @@ class HashRenameHelper(RenameHelper):
     # obs: in blake2b (64 as default) setting this as 16 will generate a totally
     # diferent hash
     # https://learn.microsoft.com/windows/win32/fileio/maximum-file-path-limitation
-    __BLAKE_DIGEST_SIZE = 16
+    __blake_digest_size = 16
     __IMPORTED_BLAKE3 = "blake3" in sys.modules
 
-    def __init__(self, dry_run: bool, _logger, hash_algorithm: str):
+    def __init__(self, dry_run: bool, _logger, hash_algorithm: str, _lenght: int, _uppercase: bool):
         if hash_algorithm == RenameAlgorithm.BLAKE3 and not self.__IMPORTED_BLAKE3:
             exit_with_error("blake3 not found, please run 'pip install blake3' or choose another" +
                             "algorithm", ErrorExitCode.USER_ERROR)
 
         super().__init__(dry_run, _logger)
 
+        if _lenght:
+            self.__blake_digest_size = _lenght
+
+        self._uppercase = _uppercase
+
         if hash_algorithm == RenameAlgorithm.NOTSET and not self.__IMPORTED_BLAKE3:
-            super().getLogger().warning("blake3 not found, defaulting to md5!")
+            super().get_logger().warning("blake3 not found, defaulting to md5!")
             self.__hash_algorithm = RenameAlgorithm.MD5
             return
 
         self.__hash_algorithm = RenameAlgorithm.BLAKE3 if hash_algorithm == RenameAlgorithm.NOTSET \
             else hash_algorithm
 
-        super().getLogger().debug("Hash Algorithm: %s", self.__hash_algorithm)
+        super().get_logger().debug("Hash Algorithm: %s", self.__hash_algorithm)
 
     def __name_generator(self, file_path: str) -> str:
         """Generate a string of characters based on file and hash algorithm given as param"""
@@ -132,7 +137,7 @@ class HashRenameHelper(RenameHelper):
             RenameAlgorithm.SHA256: hashlib.sha256(),
             RenameAlgorithm.SHA384: hashlib.sha384(),
             RenameAlgorithm.SHA512: hashlib.sha512(),
-            RenameAlgorithm.BLAKE2B: hashlib.blake2b(digest_size=self.__BLAKE_DIGEST_SIZE)
+            RenameAlgorithm.BLAKE2B: hashlib.blake2b(digest_size=self.__blake_digest_size)
         }
 
         if self.__IMPORTED_BLAKE3:
@@ -149,9 +154,9 @@ class HashRenameHelper(RenameHelper):
                 hashing.update(block)
 
         if self.__hash_algorithm == RenameAlgorithm.BLAKE3:
-            return hashing.hexdigest(length=self.__BLAKE_DIGEST_SIZE)
+            return hashing.hexdigest(length=self.__blake_digest_size).upper()
 
-        return hashing.hexdigest()
+        return hashing.hexdigest().upper()
 
     def rename(self, source_file_path: str, dest_dir_path: str):
         if not os.path.isfile(source_file_path):
@@ -186,11 +191,20 @@ class RandomRenameHelper(RenameHelper):
     """Rename files using random characters"""
 
     # 62^16 - setting this very low can cause problems
-    __DICTIONARY = string.digits + string.ascii_letters
-    __FILENAME_SIZE = 16
+    # __DICTIONARY = string.digits + string.ascii_letters
+    __filename_size = 16
+
+    def __init__(self, dry_run: bool, _logger, _lenght: int, _uppercase: bool):
+        super().__init__(dry_run, _logger)
+
+        if _lenght:
+            self.__filename_size = _lenght
+
+        self.__dictionary = string.ascii_uppercase + string.digits if _uppercase else \
+            string.digits + string.ascii_letters
 
     def __name_generator(self) -> str:
-        return ''.join(random.choices(self.__DICTIONARY, k=self.__FILENAME_SIZE))
+        return ''.join(random.choices(self.__dictionary, k=self.__filename_size))
 
     # TODO: Add atributte 'LENGHT'
     def rename(self, source_file_path: str, dest_dir_path: str):
@@ -280,13 +294,24 @@ def main():
                         action='version',
                         version=VERSION)
 
+    parser.add_argument('-l',
+                        '--lenght',
+                        type=int,
+                        default=0,
+                        action='store',
+                        help='Lenght used in filename for blake3 and fuzzy algorithms')
+
+    parser.add_argument('-u',
+                        '--uppercase',
+                        default=False,
+                        action='store_true',
+                        help='Convert characters to UPPERCASE when possible')
+
     argsp = parser.parse_args()
 
     logging.basicConfig(format=LOGGING_FORMAT, level=logging.INFO)
 
-    debug = argsp.debug
-
-    if debug:
+    if argsp.debug:
         logger.setLevel(logging.DEBUG)
 
     if argsp.silent:
@@ -295,12 +320,8 @@ def main():
                             "declared together", ErrorExitCode.USER_ERROR)
         logger.setLevel(logging.WARNING)
 
-    dry_run = argsp.dry_run
-
-    if dry_run or debug:
+    if argsp.dry_run or argsp.debug:
         logger.info(vars(argsp))
-
-    use_hash = argsp.hash
 
     # Input
     # this part of code runs anyway because if user does not define
@@ -325,8 +346,9 @@ def main():
         logger.info("No files, nothing to do!")
         return
 
-    rename_helper = RandomRenameHelper(dry_run, logger) if use_hash == RenameAlgorithm.FUZZY \
-        else HashRenameHelper(dry_run, logger, use_hash)
+    rename_helper = RandomRenameHelper(argsp.dry_run, logger, argsp.lenght, argsp.uppercase) if \
+        argsp.hash == RenameAlgorithm.FUZZY else HashRenameHelper(argsp.dry_run, logger, \
+        argsp.hash, argsp.lenght, argsp.uppercase)
 
     output_folder = input_folder if argsp.output is None else argsp.output
 
