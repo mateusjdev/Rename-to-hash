@@ -35,7 +35,7 @@ try:
 except ModuleNotFoundError:
     pass
 
-VERSION = "v2.5"
+VERSION = "v2.5.1"
 
 # TODO: better format for logging (https://stackoverflow.com/q/384076)
 LOGGING_FORMAT = 'rename.py: %(message)s'
@@ -164,6 +164,12 @@ class RenameHelper(metaclass=abc.ABCMeta):
             return
 
         if os.path.isfile(input_path):
+             # TODO: check if input_file_name == argv[0]
+            # argv[0] == 'python rename.py' || './renamy.py' || ...
+            if input_path == "rename.py":
+                logger.info("Skipping source file %s", input_path)
+                return
+
             self.rename(input_path, output_path)
             return
 

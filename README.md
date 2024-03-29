@@ -32,7 +32,7 @@ This will rename all files to the selected hashing algorithm (`blake3` is defaul
 -r, --recursive       Recurse DIRs, when enabled, will not accept output folder
 ```
 
-**Supported hashes:** `md5 / blake3 / sha1 / sha224 / sha256 / sha384 / sha512`
+**Supported hashes:** `md5 / blake3 / blake2 / sha1 / sha224 / sha256 / sha384 / sha512 / fuzzy`
 
 [Algorithm Benchmarks](benchmark/README.md)
 
