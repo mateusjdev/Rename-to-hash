@@ -30,24 +30,13 @@ This will rename all files to the selected hashing algorithm (`blake3` is defaul
                       Lenght used in filename for blake3 and fuzzy algorithms
 -u, --uppercase       Convert characters to UPPERCASE when possible
 -r, --recursive       Recurse DIRs, when enabled, will not accept output folder
+-V, --verbose         Show full path
 ```
 
 **Supported hashes:** `md5 / blake3 / blake2 / sha1 / sha224 / sha256 / sha384 / sha512 / fuzzy`
 
+---
+
 [Algorithm Benchmarks](benchmark/README.md)
 
-## TODO
-
-- Print only common path to logs
-- Add multiple -i/--inputs || Fix multiple -i/--inputs
-
-## Possible Improvements
-
-These options can be implemented easily, but in my use case, they are not relevant
-
-- Colision related
-  - `--delete`: As now, due to hash colision, duplicated files are not deleted
-  - `--confirm`: Use another hash to compare duplicated files
-  - `--preserve`: Location to move and preserve duplicated files
-- `--json`: save logs/every action with json
-- DEBUG: Create tests
+[TODO: Possible Improvements](TODO.md)

@@ -35,7 +35,7 @@ try:
 except ModuleNotFoundError:
     pass
 
-VERSION = "v2.5.1"
+VERSION = "v2.6"
 
 # TODO: better format for logging (https://stackoverflow.com/q/384076)
 LOGGING_FORMAT = 'rename.py: %(message)s'
@@ -51,17 +51,28 @@ def exit_with_error(error: str, err_nu: int):
 class RenameHelper(metaclass=abc.ABCMeta):
     """Move files / renaming"""
 
-    def __init__(self, dry_run_: bool, logger_, recursive_: bool):
+    def __init__(self, dry_run_: bool, logger_, recursive_: bool, verbose_):
         self.__dry_run = dry_run_
         self.__logger = logger_
         self.__recursive = recursive_
+        self.__verbose = verbose_
 
     def __move(self, source: str, destination: str):
         """Move file / Rename"""
-        if self.__dry_run:
-            self.__logger.info("(dry-run)%s --> %s", source, destination)
-        else:
+
+        if not self.__dry_run:
             os.rename(source, destination)
+
+        if not self.__verbose:
+            source = os.path.relpath(source)
+            destination = os.path.relpath(destination)
+        else:
+            self.__logger.debug("CWD INP: %s", os.path.relpath(source))
+            self.__logger.debug("CWD OUT: %s", os.path.relpath(destination))
+
+        if self.__dry_run:
+            self.__logger.info("(dry-run) %s --> %s", source, destination)
+        else:
             self.__logger.info("%s --> %s", source, destination)
 
     def get_logger(self):
@@ -77,7 +88,7 @@ class RenameHelper(metaclass=abc.ABCMeta):
         # destination path exists?
         destination_dir = os.path.dirname(destination)
         if not os.path.isdir(destination_dir):
-            exit_with_error("Cannot move to dir" + destination_dir, ErrorExitCode.CODE_ERROR)
+            exit_with_error(f"Cannot move to dir'{destination_dir}'", ErrorExitCode.CODE_ERROR)
 
         # filename with future source name exists?
         # if not move and return OK
@@ -88,6 +99,11 @@ class RenameHelper(metaclass=abc.ABCMeta):
         # are source and destination the same?
         # if yes do nothing and return OK
         if os.path.samefile(source, destination):
+            if self.__verbose:
+                self.__logger.info("file %s already hashed", source)
+                return 0
+
+            source = os.path.relpath(source)
             self.__logger.info("file %s already hashed", source)
             return 0
 
@@ -110,10 +126,10 @@ class RenameHelper(metaclass=abc.ABCMeta):
 
         # TODO: check behavior on links (folders, files, symlinks...)
         if not os.path.isdir(input_dir_path):
-            exit_with_error("Not a dir" + input_dir_path, ErrorExitCode.CODE_ERROR)
+            exit_with_error(f"Not a dir: '{input_dir_path}'", ErrorExitCode.CODE_ERROR)
 
         if not os.path.isdir(output_dir_path):
-            exit_with_error("Not a dir" + output_dir_path, ErrorExitCode.CODE_ERROR)
+            exit_with_error(f"Not a dir: '{output_dir_path}'", ErrorExitCode.CODE_ERROR)
 
         input_file_list = os.listdir(input_dir_path)
 
@@ -157,7 +173,7 @@ class RenameHelper(metaclass=abc.ABCMeta):
         output_path = os.path.normpath(output_path)
 
         if not os.path.isdir(output_path):
-            exit_with_error("",1)
+            exit_with_error(f"Not a dir: '{output_path}'", ErrorExitCode.CODE_ERROR)
 
         if os.path.isdir(input_path):
             self.enqueue_dir(input_path, output_path)
@@ -173,7 +189,7 @@ class RenameHelper(metaclass=abc.ABCMeta):
             self.rename(input_path, output_path)
             return
 
-        exit_with_error("Not a file/dir: " + input_path, ErrorExitCode.CODE_ERROR)
+        exit_with_error(f"Not a file/dir: '{input_path}'", ErrorExitCode.CODE_ERROR)
 
 
 class HashRenameHelper(RenameHelper):
@@ -187,13 +203,13 @@ class HashRenameHelper(RenameHelper):
     __blake_digest_size = 16
     __IMPORTED_BLAKE3 = "blake3" in sys.modules
 
-    def __init__(self, dry_run_: bool, logger_, recursive_: bool, hash_algorithm: str, _lenght: int,
-                 _uppercase: bool):
+    def __init__(self, dry_run_: bool, logger_, recursive_: bool, verbose_: bool,
+                 hash_algorithm: str, _lenght: int, _uppercase: bool):
         if hash_algorithm == RenameAlgorithm.BLAKE3 and not self.__IMPORTED_BLAKE3:
             exit_with_error("blake3 not found, please run 'pip install blake3' or choose another" +
                             "algorithm", ErrorExitCode.USER_ERROR)
 
-        super().__init__(dry_run_, logger_, recursive_)
+        super().__init__(dry_run_, logger_, recursive_, verbose_)
 
         if _lenght:
             self.__blake_digest_size = _lenght
@@ -214,7 +230,7 @@ class HashRenameHelper(RenameHelper):
         """Generate a string of characters based on file and hash algorithm given as param"""
 
         if not os.path.isfile(file_path):
-            exit_with_error("Not a valid file:" + file_path, ErrorExitCode.USER_ERROR)
+            exit_with_error(f"Not a valid file: '{file_path}'", ErrorExitCode.USER_ERROR)
 
         dict_algorithm = {
             RenameAlgorithm.MD5: hashlib.md5(),
@@ -282,8 +298,9 @@ class RandomRenameHelper(RenameHelper):
     # __DICTIONARY = string.digits + string.ascii_letters
     __filename_size = 16
 
-    def __init__(self, dry_run_: bool, logger_, recursive_: bool, _lenght: int, _uppercase: bool):
-        super().__init__(dry_run_, logger_, recursive_)
+    def __init__(self, dry_run_: bool, logger_, recursive_: bool, verbose_: bool, _lenght: int,
+                 _uppercase: bool):
+        super().__init__(dry_run_, logger_, recursive_, verbose_)
 
         if _lenght:
             self.__filename_size = _lenght
@@ -294,7 +311,6 @@ class RandomRenameHelper(RenameHelper):
     def __name_generator(self) -> str:
         return ''.join(choices(self.__dictionary, k=self.__filename_size))
 
-    # TODO: Add atributte 'LENGHT'
     def rename(self, source_file_path: str, dest_dir_path: str):
         if not os.path.isfile(source_file_path):
             exit_with_error(f"Not a file: '{source_file_path}'", ErrorExitCode.CODE_ERROR)
@@ -321,14 +337,14 @@ def is_path(path: str):
     if os.path.isfile(path) or os.path.isdir(path):
         return path
 
-    exit_with_error('No such file or directory: ' + path, ErrorExitCode.USER_ERROR)
+    exit_with_error(f"No such file or directory: '{path}'", ErrorExitCode.USER_ERROR)
 
 def is_dir(path: str):
     path = os.path.abspath(path)
     if os.path.isdir(path):
         return path
 
-    exit_with_error('Not a valid directory: ' + path, ErrorExitCode.USER_ERROR)
+    exit_with_error(f"Not a valid directory: '{path}'", ErrorExitCode.USER_ERROR)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -367,7 +383,7 @@ def main():
                         '--input',
                         metavar='DIR/FILE',
                         type=is_path,
-                        default=os.path.abspath('./'),
+                        default=os.getcwd(),
                         action='store',
                         help='Files that will be hashed')
 
@@ -402,6 +418,12 @@ def main():
                     action='store_true',
                     help='Recurse DIRs, when enabled, will not accept output folder')
 
+    parser.add_argument('-V',
+                    '--verbose',
+                    default=False,
+                    action='store_true',
+                    help='Show full path')
+
     argsp = parser.parse_args()
 
     logging.basicConfig(format=LOGGING_FORMAT, level=logging.INFO)
@@ -420,16 +442,17 @@ def main():
 
     # TODO: Improve .git repo detection
     if os.path.isdir(argsp.input):
-        if which("git"):
-            if call(["git", "rev-parse","--is-inside-work-tree"], stderr=STDOUT, \
+        if which("git") and not argsp.debug: # ignore (used for debudding)
+            if call(["git", "-C", os.path.normpath(argsp.input), "rev-parse"], stderr=STDOUT, \
                     stdout=open(os.devnull, 'w', encoding='UTF-8')) == 0:
                 exit_with_error("Input path is git repo!", ErrorExitCode.SOFT_ERROR)
         elif os.path.exists(os.path.join(argsp.input, ".git")):
             exit_with_error("Input path is git repo!", ErrorExitCode.SOFT_ERROR)
 
-    rename_helper = RandomRenameHelper(argsp.dry_run, logger,argsp.recursive, argsp.lenght,
-        argsp.uppercase) if argsp.hash == RenameAlgorithm.FUZZY else HashRenameHelper(argsp.dry_run\
-        ,logger, argsp.recursive,argsp.hash, argsp.lenght, argsp.uppercase)
+    rename_helper = RandomRenameHelper(argsp.dry_run, logger,argsp.recursive, argsp.verbose,
+        argsp.lenght, argsp.uppercase) if argsp.hash == RenameAlgorithm.FUZZY else \
+        HashRenameHelper(argsp.dry_run, logger, argsp.recursive, argsp.verbose, argsp.hash,
+                         argsp.lenght, argsp.uppercase)
 
     # if --recursive and --output be declared together, all diferent folders traversed will be
     # renamed to the same output folder
