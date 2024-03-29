@@ -17,11 +17,19 @@ This will rename all files to the selected hashing algorithm (`blake3` is defaul
 ## Options
 
 ```txt
--h            Print this help text and exit
--d            Dry run, doesn't rename files
--H HASH       Hash that will be used
--i DIR/FILE   Path to files that will be hashed
--o DIR        Location were hashed files will be stored
+-h, --help            show this help message and exit
+-d, --dry-run         dry run, doesn't rename or delete files
+--debug               Print debug logs
+--silent              SHHHHHHH! Doesn't print to stdout, way faster!
+-H HASH, --hash HASH  hash that will be used: [md5/blake3/blake2/sha1/sha224/sha256/sha384/sha512/fuzzy]
+-i DIR/FILE, --input DIR/FILE
+                      Files that will be hashed
+-o DIR, --output DIR  Location were hashed files will be stored
+-v, --version         show program's version number and exit
+-l LENGHT, --lenght LENGHT
+                      Lenght used in filename for blake3 and fuzzy algorithms
+-u, --uppercase       Convert characters to UPPERCASE when possible
+-r, --recursive       Recurse DIRs, when enabled, will not accept output folder
 ```
 
 **Supported hashes:** `md5 / blake3 / sha1 / sha224 / sha256 / sha384 / sha512`
@@ -31,7 +39,6 @@ This will rename all files to the selected hashing algorithm (`blake3` is defaul
 ## TODO
 
 - Print only common path to logs
-- Add -r/--recursive
 - Add multiple -i/--inputs || Fix multiple -i/--inputs
 
 ## Possible Improvements

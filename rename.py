@@ -4,7 +4,10 @@ import hashlib
 import argparse
 import logging
 import string
-import random
+import abc
+from random import choices
+from shutil import which
+from subprocess import call, STDOUT
 
 class RenameAlgorithm:
     """List of Hashing Algorithms"""
@@ -32,7 +35,7 @@ try:
 except ModuleNotFoundError:
     pass
 
-VERSION = "v2.4"
+VERSION = "v2.5"
 
 # TODO: better format for logging (https://stackoverflow.com/q/384076)
 LOGGING_FORMAT = 'rename.py: %(message)s'
@@ -45,12 +48,13 @@ def exit_with_error(error: str, err_nu: int):
     logger.critical("ERROR: %s", error)
     sys.exit(err_nu)
 
-class RenameHelper:
+class RenameHelper(metaclass=abc.ABCMeta):
     """Move files / renaming"""
 
-    def __init__(self, dry_run: bool, _logger):
-        self.__dry_run = dry_run
-        self.__logger = _logger
+    def __init__(self, dry_run_: bool, logger_, recursive_: bool):
+        self.__dry_run = dry_run_
+        self.__logger = logger_
+        self.__recursive = recursive_
 
     def __move(self, source: str, destination: str):
         """Move file / Rename"""
@@ -91,6 +95,81 @@ class RenameHelper:
         # FileExistsError: [Errno 17]
         return 17
 
+    #@abc.abstractmethod
+    #def name_generator(self):
+    #    raise NotImplementedError("name_generator() method not implemented")
+
+    @abc.abstractmethod
+    def rename(self, source_file_path: str, dest_dir_path: str):
+        raise NotImplementedError("rename() method not implemented")
+
+    def enqueue_dir(self, input_dir_path: str, output_dir_path):
+
+        input_dir_path = os.path.normpath(input_dir_path)
+        output_dir_path = os.path.normpath(output_dir_path)
+
+        # TODO: check behavior on links (folders, files, symlinks...)
+        if not os.path.isdir(input_dir_path):
+            exit_with_error("Not a dir" + input_dir_path, ErrorExitCode.CODE_ERROR)
+
+        if not os.path.isdir(output_dir_path):
+            exit_with_error("Not a dir" + output_dir_path, ErrorExitCode.CODE_ERROR)
+
+        input_file_list = os.listdir(input_dir_path)
+
+        # for input_file_name in os.listdir(input_dir_path):
+        for input_file_name in input_file_list:
+
+            # "/in/" + "input.txt" -> "/in/input.txt"
+            input_file_path = os.path.join(input_dir_path, input_file_name)
+            self.__logger.debug("Queued INP path: %s", input_file_path)
+            self.__logger.debug("Queued OUT path: %s", output_dir_path)
+
+            if os.path.isdir(input_file_path):
+                if not self.__recursive:
+                    logger.debug("Skipping directory %s", input_file_name)
+                    continue
+
+                logger.debug("Enqueing directory %s", input_file_path)
+                self.enqueue_dir(input_file_path, input_file_path)
+                continue
+
+            # TODO: check if input_file_name == argv[0]
+            # argv[0] == 'python rename.py' || './renamy.py' || ...
+            if input_file_name == "rename.py":
+                logger.info("Skipping source file %s", input_file_name)
+                continue
+
+            # TODO: remove duplicated checks
+            if not os.path.isfile(input_file_path):
+                exit_with_error("Not file or dir", ErrorExitCode.CODE_ERROR)
+                break
+
+            logger.debug("Trying to rename: %s", input_file_name)
+
+            self.rename(input_file_path, output_dir_path)
+
+    # TODO: use os.walk()
+    def enqueue_path(self, input_path: str, output_path: str):
+
+        # TODO: remove duplicated checks
+        input_path = os.path.normpath(input_path)
+        output_path = os.path.normpath(output_path)
+
+        if not os.path.isdir(output_path):
+            exit_with_error("",1)
+
+        if os.path.isdir(input_path):
+            self.enqueue_dir(input_path, output_path)
+            return
+
+        if os.path.isfile(input_path):
+            self.rename(input_path, output_path)
+            return
+
+        exit_with_error("Not a file/dir: " + input_path, ErrorExitCode.CODE_ERROR)
+
+
 class HashRenameHelper(RenameHelper):
     """Rename files using file hashsum"""
 
@@ -102,12 +181,13 @@ class HashRenameHelper(RenameHelper):
     __blake_digest_size = 16
     __IMPORTED_BLAKE3 = "blake3" in sys.modules
 
-    def __init__(self, dry_run: bool, _logger, hash_algorithm: str, _lenght: int, _uppercase: bool):
+    def __init__(self, dry_run_: bool, logger_, recursive_: bool, hash_algorithm: str, _lenght: int,
+                 _uppercase: bool):
         if hash_algorithm == RenameAlgorithm.BLAKE3 and not self.__IMPORTED_BLAKE3:
             exit_with_error("blake3 not found, please run 'pip install blake3' or choose another" +
                             "algorithm", ErrorExitCode.USER_ERROR)
 
-        super().__init__(dry_run, _logger)
+        super().__init__(dry_run_, logger_, recursive_)
 
         if _lenght:
             self.__blake_digest_size = _lenght
@@ -154,9 +234,9 @@ class HashRenameHelper(RenameHelper):
                 hashing.update(block)
 
         if self.__hash_algorithm == RenameAlgorithm.BLAKE3:
-            return hashing.hexdigest(length=self.__blake_digest_size).upper()
+            return hashing.hexdigest(length=self.__blake_digest_size)
 
-        return hashing.hexdigest().upper()
+        return hashing.hexdigest()
 
     def rename(self, source_file_path: str, dest_dir_path: str):
         if not os.path.isfile(source_file_path):
@@ -165,12 +245,14 @@ class HashRenameHelper(RenameHelper):
         if not os.path.isdir(dest_dir_path):
             exit_with_error(f"Not a folder: '{dest_dir_path}'", ErrorExitCode.CODE_ERROR)
 
-        file_name = self.__name_generator(source_file_path)
+        file_name = self.__name_generator(source_file_path).upper() if self._uppercase else \
+            self.__name_generator(source_file_path)
         file_extension = os.path.splitext(source_file_path)[1].lower()
 
         # return 0 = return
         # return >0 = continue
-        if not super()._check(source_file_path, dest_dir_path +  file_name + file_extension):
+        if not super()._check(source_file_path, os.path.join(dest_dir_path,
+                                                             file_name + file_extension)):
             return
 
         # 17 FileExistsError
@@ -179,8 +261,8 @@ class HashRenameHelper(RenameHelper):
         while True:
             # return 0 = return
             file_postfix = "_" + str(iterator)
-            if not super()._check(source_file_path, dest_dir_path +  file_name +
-                            file_postfix + file_extension):
+            if not super()._check(source_file_path, os.path.join(dest_dir_path, file_name +
+                            file_postfix + file_extension)):
                 return
             # return >0 = continue
             iterator = iterator + 1
@@ -194,8 +276,8 @@ class RandomRenameHelper(RenameHelper):
     # __DICTIONARY = string.digits + string.ascii_letters
     __filename_size = 16
 
-    def __init__(self, dry_run: bool, _logger, _lenght: int, _uppercase: bool):
-        super().__init__(dry_run, _logger)
+    def __init__(self, dry_run_: bool, logger_, recursive_: bool, _lenght: int, _uppercase: bool):
+        super().__init__(dry_run_, logger_, recursive_)
 
         if _lenght:
             self.__filename_size = _lenght
@@ -204,7 +286,7 @@ class RandomRenameHelper(RenameHelper):
             string.digits + string.ascii_letters
 
     def __name_generator(self) -> str:
-        return ''.join(random.choices(self.__dictionary, k=self.__filename_size))
+        return ''.join(choices(self.__dictionary, k=self.__filename_size))
 
     # TODO: Add atributte 'LENGHT'
     def rename(self, source_file_path: str, dest_dir_path: str):
@@ -220,7 +302,8 @@ class RandomRenameHelper(RenameHelper):
         while True:
             file_name = self.__name_generator()
             # return 0 = return
-            if not super()._check(source_file_path, dest_dir_path +  file_name + file_extension):
+            if not super()._check(source_file_path, os.path.join(dest_dir_path,
+                                                                 file_name + file_extension)):
                 return
             # return >0 = continue
             # 17 FileExistsError
@@ -228,16 +311,16 @@ class RandomRenameHelper(RenameHelper):
 
 
 def is_path(path: str):
-    abs_path = os.path.abspath(path)
-    if os.path.isfile(abs_path) or os.path.isdir(abs_path):
-        return abs_path
+    path = os.path.abspath(path)
+    if os.path.isfile(path) or os.path.isdir(path):
+        return path
 
     exit_with_error('No such file or directory: ' + path, ErrorExitCode.USER_ERROR)
 
 def is_dir(path: str):
-    abs_path = os.path.abspath(path)
-    if os.path.isdir(abs_path):
-        return abs_path
+    path = os.path.abspath(path)
+    if os.path.isdir(path):
+        return path
 
     exit_with_error('Not a valid directory: ' + path, ErrorExitCode.USER_ERROR)
 
@@ -260,7 +343,7 @@ def main():
     parser.add_argument('--silent',
                         default=False,
                         action='store_true',
-                        help='SHHHHHHH!')
+                        help='SHHHHHHH! Doesn\'t print to stdout (runs way faster!) ')
 
     parser.add_argument('-H',
                         '--hash',
@@ -307,6 +390,12 @@ def main():
                         action='store_true',
                         help='Convert characters to UPPERCASE when possible')
 
+    parser.add_argument('-r',
+                    '--recursive',
+                    default=False,
+                    action='store_true',
+                    help='Recurse DIRs, when enabled, will not accept output folder')
+
     argsp = parser.parse_args()
 
     logging.basicConfig(format=LOGGING_FORMAT, level=logging.INFO)
@@ -323,71 +412,28 @@ def main():
     if argsp.dry_run or argsp.debug:
         logger.info(vars(argsp))
 
-    # Input
-    # this part of code runs anyway because if user does not define
-    # a input folder it have a default value
-    # check if $input is a valid dir path for input files
-    input_folder = ''
-    input_file_list = ''
+    # TODO: Improve .git repo detection
     if os.path.isdir(argsp.input):
-        input_folder = argsp.input
-
-        # TODO: Improve .git repo detection
-        if os.path.exists(input_folder + "/.git"):
+        if which("git"):
+            if call(["git", "rev-parse","--is-inside-work-tree"], stderr=STDOUT, \
+                    stdout=open(os.devnull, 'w', encoding='UTF-8')) == 0:
+                exit_with_error("Input path is git repo!", ErrorExitCode.SOFT_ERROR)
+        elif os.path.exists(os.path.join(argsp.input, ".git")):
             exit_with_error("Input path is git repo!", ErrorExitCode.SOFT_ERROR)
 
-        input_file_list = os.listdir(input_folder)
+    rename_helper = RandomRenameHelper(argsp.dry_run, logger,argsp.recursive, argsp.lenght,
+        argsp.uppercase) if argsp.hash == RenameAlgorithm.FUZZY else HashRenameHelper(argsp.dry_run\
+        ,logger, argsp.recursive,argsp.hash, argsp.lenght, argsp.uppercase)
 
-    elif os.path.isfile(argsp.input):
-        input_folder = os.path.dirname(argsp.input)
-        input_file_list = [os.path.basename(argsp.input)]
+    # if --recursive and --output be declared together, all diferent folders traversed will be
+    # renamed to the same output folder
+    if argsp.recursive and argsp.output:
+        exit_with_error("--recursive and --output cannot be declared together!", \
+                        ErrorExitCode.SOFT_ERROR)
 
-    if not input_file_list:
-        logger.info("No files, nothing to do!")
-        return
+    rename_helper.enqueue_path(argsp.input,
+                 argsp.input if argsp.output is None else argsp.output)
 
-    rename_helper = RandomRenameHelper(argsp.dry_run, logger, argsp.lenght, argsp.uppercase) if \
-        argsp.hash == RenameAlgorithm.FUZZY else HashRenameHelper(argsp.dry_run, logger, \
-        argsp.hash, argsp.lenght, argsp.uppercase)
-
-    output_folder = input_folder if argsp.output is None else argsp.output
-
-    # input_file_path		= /in/input.txt
-    # input_file_basepath	= /in/
-    # input_file_name       = input.txt
-    # input_file_name_only	= input
-    # input_file_extension	= txt
-    # output_file_path		= /out/output.txt
-    # output_file_basepath	= /out/
-    # output_file_name      = output.txt
-    # output_file_name_only	= output
-    # preserve_file_path    = /pre/input.txt
-    # input_file_list       = input1.txt, input2.txt
-    output_file_basepath = output_folder + "/"
-    input_file_basepath = input_folder + "/"
-
-    for input_file_name in input_file_list:
-
-        # "/in/" + "input.txt" -> "/in/input.txt"
-        input_file_path = input_file_basepath + input_file_name
-
-        # TODO: check if input_file_name == argv[0]
-        # argv[0] == 'python rename.py' || './renamy.py' || ...
-        if input_file_name == "rename.py":
-            logger.info("Skipping source file %s", input_file_name)
-            continue
-
-        if os.path.isdir(input_file_path):
-            logger.info("Skipping directory %s", input_file_name)
-            continue
-
-        if not os.path.isfile(input_file_path):
-            exit_with_error("Not file or dir", ErrorExitCode.CODE_ERROR)
-            break
-
-        logger.debug("Trying to rename: %s", input_file_name)
-
-        rename_helper.rename(input_file_path, output_file_basepath)
 
 if __name__ == "__main__":
     main()
