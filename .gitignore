@@ -1,3 +1,4 @@
 .vscode
 _temp/
-sample/
+_sample/
+Pipfile

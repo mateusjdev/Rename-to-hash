@@ -5,6 +5,7 @@ Single python file to rename all files in a directory to their hash sums
 ## Usage
 
 Requirements:
+
 - [python](https://www.python.org/)
 - [blake3](https://pypi.org/project/blake3/) (if not present, defaults to `md5`)
 
@@ -37,6 +38,6 @@ This will rename all files to the selected hashing algorithm (`blake3` is defaul
 
 ---
 
-[Algorithm Benchmarks](benchmark/README.md)
+[Algorithm Benchmarks](docs/README.md)
 
-[TODO: Possible Improvements](TODO.md)
+[TODO: Possible improvements](docsTODO.md)
