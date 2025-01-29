@@ -8,6 +8,7 @@ import abc
 from random import choices
 from shutil import which
 from subprocess import call, DEVNULL
+from blake3 import blake3
 
 
 class RenameAlgorithm:
@@ -32,13 +33,6 @@ class ErrorExitCode:
     CODE_ERROR = 4
     SOFT_ERROR = 5
 
-
-# blake3 not available on aarch64
-# https://github.com/oconnor663/blake3-py/issues/28
-try:
-    from blake3 import blake3
-except ModuleNotFoundError:
-    pass
 
 VERSION = "v3"
 
@@ -207,7 +201,6 @@ class HashRenameHelper(RenameHelper):
     # diferent hash
     # https://learn.microsoft.com/windows/win32/fileio/maximum-file-path-limitation
     __blake_digest_size = 16
-    __IMPORTED_BLAKE3 = "blake3" in sys.modules
 
     def __init__(
         self,
@@ -219,12 +212,6 @@ class HashRenameHelper(RenameHelper):
         _lenght: int,
         _uppercase: bool,
     ):
-        if hash_algorithm == RenameAlgorithm.BLAKE3 and not self.__IMPORTED_BLAKE3:
-            exit_with_error(
-                "blake3 not found, please run 'pip install blake3' or choose another algorithm",
-                ErrorExitCode.USER_ERROR,
-            )
-
         super().__init__(dry_run_, logger_, recursive_, verbose_)
 
         if _lenght:
@@ -232,18 +219,13 @@ class HashRenameHelper(RenameHelper):
 
         self._uppercase = _uppercase
 
-        if hash_algorithm == RenameAlgorithm.NOTSET and not self.__IMPORTED_BLAKE3:
-            super().get_logger().warning("blake3 not found, defaulting to md5!")
-            self.__hash_algorithm = RenameAlgorithm.MD5
+        if hash_algorithm == RenameAlgorithm.NOTSET:
+            self.__hash_algorithm = RenameAlgorithm.BLAKE3
+            super().get_logger().warning("Hash Algorithm: defaulting to blake3!")
             return
 
-        self.__hash_algorithm = (
-            RenameAlgorithm.BLAKE3
-            if hash_algorithm == RenameAlgorithm.NOTSET
-            else hash_algorithm
-        )
-
-        super().get_logger().debug("Hash Algorithm: %s", self.__hash_algorithm)
+        self.__hash_algorithm = hash_algorithm
+        super().get_logger().debug(f"Hash Algorithm: {self.__hash_algorithm}")
 
     def __name_generator(self, file_path: str) -> str:
         """Generate a string of characters based on file and hash algorithm given as param"""
@@ -263,11 +245,8 @@ class HashRenameHelper(RenameHelper):
             RenameAlgorithm.BLAKE2B: hashlib.blake2b(
                 digest_size=self.__blake_digest_size
             ),
+            RenameAlgorithm.BLAKE3: blake3(),
         }
-
-        if self.__IMPORTED_BLAKE3:
-            # pylint: disable=E1102
-            dict_algorithm[RenameAlgorithm.BLAKE3] = blake3()
 
         try:
             hashing = dict_algorithm[self.__hash_algorithm]
