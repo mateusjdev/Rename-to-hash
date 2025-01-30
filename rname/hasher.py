@@ -3,8 +3,9 @@ import hashlib
 import os
 import string
 from blake3 import blake3
-from clog import Log, ReturnCode as RetCode
 from random import choices
+
+from .clog import Log, ReturnCode as RetCode
 
 
 class RenameAlgorithm:

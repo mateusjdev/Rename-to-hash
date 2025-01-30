@@ -7,6 +7,7 @@ In version 2.2, with the implementation of the blake3 algorithm, several algorit
 **System:** linux (ramdisk)
 
 **Command:**
+
 ```shell
 hyperfine --export-markdown ../result.md --runs 20 \
 --prepare 'fuzzy_rename.py -i .' 'rename.py -i . -H md5' \

@@ -1,8 +1,9 @@
 import argparse
-import cfs
 import os
-from clog import LogLevel, Log, ReturnCode as RetCode
-from hasher import RenameAlgorithm, HashRenameHelper, RandomRenameHelper
+
+from .cfs import is_path, is_dir, is_git_dir
+from .clog import LogLevel, Log, ReturnCode as RetCode
+from .hasher import RenameAlgorithm, HashRenameHelper, RandomRenameHelper
 
 VERSION = "v3.1"
 
@@ -59,7 +60,7 @@ def main():
         "-i",
         "--input",
         metavar="DIR/FILE",
-        type=cfs.is_path,
+        type=is_path,
         default=os.getcwd(),
         action="store",
         help="Files that will be hashed",
@@ -69,7 +70,7 @@ def main():
         "-o",
         "--output",
         metavar="DIR",
-        type=cfs.is_dir,
+        type=is_dir,
         action="store",
         help="Location were hashed files will be stored",
     )
@@ -121,7 +122,7 @@ def main():
     if argsp.dry_run or argsp.debug:
         log.info(vars(argsp))
 
-    if cfs.is_git_dir(argsp.input) and not argsp.debug:
+    if is_git_dir(argsp.input) and not argsp.debug:
         log.fatal("Input path is git repo!", RetCode.SOFT_ERROR)
 
     rename_helper = (
