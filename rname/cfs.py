@@ -1,6 +1,5 @@
 import os
 from clog import Log, ReturnCode as RetCode
-
 from shutil import which
 from subprocess import call, DEVNULL
 
