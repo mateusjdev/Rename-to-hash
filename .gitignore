@@ -3,3 +3,6 @@ _temp/
 _sample/
 Pipfile
 *.lock
+dist/
+build/
+*.egg-info/
