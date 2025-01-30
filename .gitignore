@@ -1,8 +1,9 @@
-.vscode
-_temp/
-_sample/
-Pipfile
-*.lock
-dist/
-build/
 *.egg-info/
+*.lock
+.vscode
+Pipfile
+__pycache__/
+_sample/
+_temp/
+build/
+dist/

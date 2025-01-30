@@ -3,9 +3,8 @@ import hashlib
 import argparse
 import string
 import abc
+import cfs
 from random import choices
-from shutil import which
-from subprocess import call, DEVNULL
 from blake3 import blake3
 from clog import LogLevel, Log, ReturnCode as RetCode
 
@@ -327,45 +326,6 @@ class RandomRenameHelper(RenameHelper):
             continue
 
 
-def is_path(path: str):
-    path = os.path.abspath(path)
-    if os.path.isfile(path) or os.path.isdir(path):
-        return path
-
-    log.fatal(f"No such file or directory: '{path}'", RetCode.USER_ERROR)
-
-
-def is_dir(path: str):
-    path = os.path.abspath(path)
-    if os.path.isdir(path):
-        return path
-
-    log.fatal(f"Not a valid directory: '{path}'", RetCode.USER_ERROR)
-
-
-def is_git_dir(path: str) -> bool:
-    # ignore check if --input is a file
-    if not is_dir(path):
-        return False
-
-    # TODO: Improve .git repo detection
-    if which("git"):
-        if (
-            call(
-                ["git", "-C", os.path.normpath(path), "rev-parse"],
-                stderr=DEVNULL,
-                stdout=DEVNULL,
-            )
-            == 0
-        ):
-            return True
-    # TODO: walk directory sctructure
-    elif os.path.exists(os.path.join(path, ".git")):
-        return True
-
-    return False
-
-
 def main():
     parser = argparse.ArgumentParser(
         description="Single python file to rename all files in a directory to their hash sums.",
@@ -416,7 +376,7 @@ def main():
         "-i",
         "--input",
         metavar="DIR/FILE",
-        type=is_path,
+        type=cfs.is_path,
         default=os.getcwd(),
         action="store",
         help="Files that will be hashed",
@@ -426,7 +386,7 @@ def main():
         "-o",
         "--output",
         metavar="DIR",
-        type=is_dir,
+        type=cfs.is_dir,
         action="store",
         help="Location were hashed files will be stored",
     )
@@ -478,7 +438,7 @@ def main():
     if argsp.dry_run or argsp.debug:
         log.info(vars(argsp))
 
-    if is_git_dir(argsp.input) and not argsp.debug:
+    if cfs.is_git_dir(argsp.input) and not argsp.debug:
         log.fatal("Input path is git repo!", RetCode.SOFT_ERROR)
 
     rename_helper = (
